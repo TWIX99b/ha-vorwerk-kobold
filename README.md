@@ -3,7 +3,12 @@
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/)
 
 Control your **Vorwerk Kobold VR7** robot vacuum from Home Assistant – live, in
-your own language, and with native **clean by area** support.
+your own language, and with native **clean by area** support. Schedules and
+robot settings of the MyKobold app are available too, and the data the app
+syncs from a **VK7** stick vacuum.
+
+> This is a community project. It is not affiliated with or endorsed by
+> Vorwerk.
 
 *Deutsch weiter unten.*
 
@@ -69,6 +74,10 @@ Rooms of one call must be on the same Kobold map.
   Bluetooth to the app; Home Assistant sees what the app last uploaded.
 - This uses the unofficial API of the MyKobold app and may break when Vorwerk
   changes it.
+- The Bluetooth part for the VK7 (*In Bluetooth range* sensor and the
+  `kobold.vk7_ble_probe` developer action) is experimental. The VK7 only
+  accepts Bluetooth connections for a while after it has been woken up, so it
+  cannot be read in the background.
 
 ---
 
@@ -82,6 +91,9 @@ Dazu die **Zeitpläne** der App als Schalter, die **Einstellungen** (Lautstärke
 Audiosignale, Sprachassistent, Sprache, Objekte umfahren, niedrige Durchfahrten)
 und die Daten des **VK7** (Akkuzustand, Filtertüte, Wartungszähler, Saugzeit),
 soweit die App sie zuletzt synchronisiert hat.
+
+Inoffizielles Community-Projekt, nicht von Vorwerk. Die Bluetooth-Funktionen
+für den VK7 sind experimentell.
 
 **Einrichtung:** Über HACS als benutzerdefiniertes Repository hinzufügen,
 installieren, neu starten, dann *Einstellungen → Geräte & Dienste →
