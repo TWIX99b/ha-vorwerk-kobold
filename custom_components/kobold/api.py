@@ -203,6 +203,14 @@ class KoboldApi:
         result = await self._orbital("GET", f"/maps/floorplans/{floorplan_uuid}/tracks")
         return [t for t in result or [] if isinstance(t, dict)]
 
+    async def cleaning_maps(self, robot_id: str) -> list[dict[str, Any]]:
+        result = await self._orbital(
+            "GET", f"/robots/{robot_id}/cleaningmaps?cleaning_types[]=persistent"
+        )
+        if isinstance(result, dict):
+            result = result.get("cleaning_maps") or result.get("maps") or [result]
+        return [m for m in result or [] if isinstance(m, dict)]
+
     async def start_cleaning(self, robot_id: str, body: dict[str, Any]) -> Any:
         return await self._orbital(
             "POST", f"/robots/{robot_id}/cleaning/v2", json=body, app=True

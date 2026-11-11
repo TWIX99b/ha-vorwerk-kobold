@@ -42,6 +42,7 @@ from .protocol import (
     parse_floorplan,
     parse_robot_state,
     parse_zones,
+    probe_map,
     token_valid,
 )
 from .websocket import KoboldSocket
@@ -66,6 +67,7 @@ class RobotData:
     cleaning: CleaningProgress | None = None
     last_seen: datetime | None = None
     floorplans: list[FloorPlan] = field(default_factory=list)
+    map_probe: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> RobotData:
@@ -170,13 +172,25 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
         for robot in self.robots.values():
             try:
                 plans = []
+                probe: dict[str, Any] = {}
                 for raw in await self.api.floorplans(robot.robot_id):
                     plan = parse_floorplan(raw)
                     if plan is None or not plan.name:
                         continue  # unnamed maps are temporary mapping runs
-                    zones = parse_zones(await self.api.tracks(plan.floorplan_uuid))
+                    tracks = await self.api.tracks(plan.floorplan_uuid)
+                    zones = parse_zones(tracks)
                     plans.append(FloorPlan(plan.floorplan_uuid, plan.name, zones))
+                    if "floorplan" not in probe:
+                        probe["floorplan"] = probe_map(raw)
+                        probe["track"] = probe_map(tracks[0]) if tracks else None
                 robot.floorplans = plans
+                try:
+                    recent = await self.api.cleaning_maps(robot.robot_id)
+                    probe["cleaning_maps_count"] = len(recent)
+                    probe["cleaning_map"] = probe_map(recent[0]) if recent else None
+                except KoboldApiError as err:
+                    probe["cleaning_maps_error"] = str(err)
+                robot.map_probe = probe
             except KoboldApiError as err:
                 _LOGGER.debug("Could not load maps of %s: %s", robot.name, err)
 

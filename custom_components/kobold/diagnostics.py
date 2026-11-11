@@ -31,6 +31,7 @@ async def async_get_config_entry_diagnostics(
                 {"name": plan.name, "zones": [zone.name for zone in plan.zones]}
                 for plan in robot.floorplans
             ],
+            "map_probe": robot.map_probe,
         }
     return {
         "entry": async_redact_data(dict(entry.data), TO_REDACT),
