@@ -37,4 +37,5 @@ async def async_get_config_entry_diagnostics(
         "entry": async_redact_data(dict(entry.data), TO_REDACT),
         "socket_connected": bool(coordinator.socket and coordinator.socket.connected),
         "robots": async_redact_data(robots, TO_REDACT),
+        "api_probe": async_redact_data(coordinator.api_probe, TO_REDACT),
     }

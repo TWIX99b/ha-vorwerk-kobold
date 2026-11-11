@@ -223,6 +223,26 @@ class KoboldApi:
             json={"ability": ability},
         )
 
+    async def probe(self, method: str, path: str, json: Any = None) -> dict[str, Any]:
+        """Call an endpoint and describe the answer (diagnostics only)."""
+        try:
+            result = await self._orbital(method, path, json=json)
+        except KoboldApiError as err:
+            return {"status": err.status, "error": str(err)[:160]}
+        except KoboldError as err:
+            return {"error": type(err).__name__}
+        info: dict[str, Any] = {"status": "ok", "type": type(result).__name__}
+        if isinstance(result, list):
+            info["len"] = len(result)
+            if result and isinstance(result[0], dict):
+                info["item_keys"] = sorted(result[0])[:40]
+        elif isinstance(result, dict):
+            info["keys"] = sorted(result)[:40]
+        text = repr(result)
+        if len(text) <= 1500:
+            info["value"] = result
+        return info
+
     async def socket_authorization(self) -> str:
         """Log in to Companion and return the Authorization header for the socket."""
         headers = {"Authorization": f"Bearer {await self._token()}", **_app_headers(self._market)}
