@@ -123,12 +123,15 @@ class KoboldVacuum(KoboldEntity, StateVacuumEntity, RestoreEntity):
         state = self.robot.state
         commands = state.commands if state else frozenset()
         if state and not state.is_docked and "return_to_base" not in commands:
-            if "pause" in commands:
-                await self.coordinator.async_send(self.robot_id, "cleaning.pause")
-            elif "start" in commands:
-                # Robot stands idle in the room (e.g. after a cancel): the cloud
-                # only accepts "return to base" during a run, so start one first.
-                await self.coordinator.async_start(self.robot_id)
+            if "pause" not in commands:
+                # Idle in the room without a run (e.g. after a cancel): the cloud
+                # refuses return-to-base, and a new run started off the base
+                # does not find its way back reliably.
+                raise HomeAssistantError(
+                    "The robot is not on a cleaning run and cannot drive back on "
+                    "its own; please put it on the base"
+                )
+            await self.coordinator.async_send(self.robot_id, "cleaning.pause")
             if not await self._wait_for_command("return_to_base", 30):
                 raise HomeAssistantError("The robot does not accept 'return to base' right now")
         await self.coordinator.async_send(self.robot_id, "navigation.return_to_base")
