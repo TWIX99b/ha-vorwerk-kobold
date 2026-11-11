@@ -11,7 +11,20 @@ from homeassistant.core import HomeAssistant
 from .const import CONF_ID_TOKEN, CONF_REFRESH_TOKEN
 from .coordinator import KoboldConfigEntry
 
-TO_REDACT = {CONF_EMAIL, CONF_ID_TOKEN, CONF_REFRESH_TOKEN, "serial", "mac_address", "user_id"}
+TO_REDACT = {
+    CONF_EMAIL,
+    CONF_ID_TOKEN,
+    CONF_REFRESH_TOKEN,
+    "serial",
+    "mac_address",
+    "user_id",
+    "secret_key",
+    "key",
+    "token",
+    "password",
+    "email",
+    "ip",
+}
 
 
 async def async_get_config_entry_diagnostics(
