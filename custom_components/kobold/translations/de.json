@@ -137,6 +137,18 @@
       },
       "vk7_bluetooth_read": {
         "name": "Letzte Bluetooth-Abfrage"
+      },
+      "vk7_time_eb7": {
+        "name": "Saugzeit Elektrobürste EB7"
+      },
+      "vk7_time_sp7": {
+        "name": "Saugzeit Saugwischer SP7"
+      },
+      "vk7_time_pb7": {
+        "name": "Saugzeit Polsterbürste PB7"
+      },
+      "vk7_time_passive": {
+        "name": "Saugzeit ohne Elektro-Aufsatz"
       }
     },
     "binary_sensor": {

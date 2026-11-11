@@ -179,6 +179,7 @@ class KoboldVk7SensorDescription(SensorEntityDescription):
     attrs: Callable[[Vk7Data], dict[str, Any]] = lambda _device: {}
     needs_bluetooth: bool = False  # only with a Bluetooth reader for this VK7
     restore: bool = False  # keep the last value until the next reading
+    mode: str | None = None  # runtime per attachment: only if the VK7 reports it
 
 
 def _vk7_bag(device: Vk7Data) -> str | None:
@@ -202,6 +203,17 @@ def _vk7_mode_attrs(device: Vk7Data) -> dict[str, Any]:
     else:
         minutes = device.minutes_by_mode
     return {f"minutes_{mode}": value for mode, value in minutes.items()}
+
+
+VK7_MODES = ("eb7", "sp7", "pb7", "passive")
+
+
+def _vk7_mode_minutes(device: Vk7Data, mode: str) -> float | None:
+    cloud = device.minutes_by_mode.get(mode)
+    live = vk7_minutes_by_mode(device.live).get(mode) if device.live else None
+    if live is None:
+        return cloud
+    return max(live, cloud or 0)  # never go backwards (total_increasing)
 
 
 def _vk7_ble_attrs(device: Vk7Data) -> dict[str, Any]:
@@ -269,6 +281,20 @@ VK7_SENSORS: tuple[KoboldVk7SensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         value=lambda d: _parse_time(d.last_sync),
     ),
+    *(
+        KoboldVk7SensorDescription(
+            key=f"time_{mode}",
+            translation_key=f"vk7_time_{mode}",
+            device_class=SensorDeviceClass.DURATION,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            native_unit_of_measurement=UnitOfTime.MINUTES,
+            suggested_unit_of_measurement=UnitOfTime.HOURS,
+            suggested_display_precision=1,
+            value=lambda d, mode=mode: _vk7_mode_minutes(d, mode),
+            mode=mode,
+        )
+        for mode in VK7_MODES
+    ),
     KoboldVk7SensorDescription(
         key="battery_level",
         device_class=SensorDeviceClass.BATTERY,
@@ -317,6 +343,8 @@ async def async_setup_entry(
         for pid, device in coordinator.vk7.items():
             for vk7_description in VK7_SENSORS:
                 if vk7_description.needs_bluetooth and pid not in coordinator.vk7_readers:
+                    continue
+                if vk7_description.mode and _vk7_mode_minutes(device, vk7_description.mode) is None:
                     continue
                 if (f"vk7_{pid}", vk7_description.key) not in added:
                     added.add((f"vk7_{pid}", vk7_description.key))

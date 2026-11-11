@@ -25,6 +25,18 @@
       },
       "vk7_bluetooth_read": {
         "default": "mdi:bluetooth-transfer"
+      },
+      "vk7_time_eb7": {
+        "default": "mdi:vacuum"
+      },
+      "vk7_time_sp7": {
+        "default": "mdi:water-outline"
+      },
+      "vk7_time_pb7": {
+        "default": "mdi:sofa-outline"
+      },
+      "vk7_time_passive": {
+        "default": "mdi:vacuum-outline"
       }
     },
     "number": {

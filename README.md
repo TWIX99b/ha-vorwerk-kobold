@@ -33,7 +33,9 @@ syncs from a **VK7** stick vacuum.
   the language on the robot.
 - **VK7 stick vacuum**: the data the app syncs from the VK7 (battery health,
   filter bag, maintenance trackers such as *clean brush* in %, total time and
-  area). It only changes after the app has synced with the VK7 via Bluetooth.
+  area, and the time per attachment: EB7 power brush, SP7 vacuum mop, PB7
+  upholstery brush and without a powered attachment, e.g. the HD7 hard-floor
+  nozzle or the small nozzles). It only changes after the app has synced with the VK7 via Bluetooth.
   With Home Assistant Bluetooth (local adapter or an active proxy near the
   VK7) the integration also reads the VK7 directly whenever it is awake (in
   use or charging): **battery level**, filter bag and runtimes, plus an *In
