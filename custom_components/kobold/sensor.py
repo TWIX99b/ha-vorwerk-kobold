@@ -463,7 +463,10 @@ class KoboldVk7Sensor(KoboldVk7Entity, RestoreSensor):
 
 
 class KoboldVk7TrackerSensor(KoboldVk7Entity, SensorEntity):
-    """A maintenance tracker of the app ("Bürste reinigen", ...), in % of its interval."""
+    """A maintenance tracker of the app ("Bürste reinigen", ...), in % of its interval.
+
+    Continues from the Bluetooth runtimes when the app no longer syncs.
+    """
 
     _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
@@ -485,16 +488,20 @@ class KoboldVk7TrackerSensor(KoboldVk7Entity, SensorEntity):
     @property
     def native_value(self) -> int | None:
         tracker = self.tracker
-        return tracker.progress if tracker else None
+        if tracker is None:
+            return None
+        return self.coordinator.vk7_maintenance.state(self.device, tracker)[1]
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
         tracker = self.tracker
         if tracker is None:
             return None
+        hours, _progress, source = self.coordinator.vk7_maintenance.state(self.device, tracker)
         return {
             "type": tracker.kind,
-            "hours_used": tracker.counted_hours,
+            "hours_used": hours,
             "interval_hours": tracker.life_hours,
             "maintenance_window_hours": list(tracker.maintenance_hours),
+            "counted_from": source,
         }

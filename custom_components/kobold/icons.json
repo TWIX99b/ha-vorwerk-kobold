@@ -86,6 +86,11 @@
       "auto_update": {
         "default": "mdi:update"
       }
+    },
+    "button": {
+      "vk7_tracker_reset": {
+        "default": "mdi:check-circle-outline"
+      }
     }
   }
 }

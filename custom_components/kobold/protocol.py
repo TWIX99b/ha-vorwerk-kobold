@@ -650,6 +650,19 @@ class Vk7Tracker:
     counted_hours: float | None
     life_hours: float | None
     maintenance_hours: tuple[float, ...] = ()
+    source: str = "total"  # which runtime counts for this tracker
+
+
+def tracker_source(image_url: Any) -> str:
+    """Which runtime a maintenance tracker counts, from the app's tracker image."""
+    name = str(image_url or "").rsplit("/", 1)[-1].lower()
+    if name.startswith("eb_7"):
+        return "eb7"
+    if name.startswith("sp_7"):
+        return "sp7"
+    if name.startswith("vk_7"):
+        return "motor"
+    return "total"
 
 
 @dataclass
@@ -737,6 +750,7 @@ def apply_vk7_health(device: Vk7Data, data: Any) -> None:
                     v for v in (_as_float(h) for h in item.get("maintenanceWindowHours") or [])
                     if v is not None
                 ),
+                source=tracker_source(item.get("imageUrl")),
             )
         )
     device.trackers = tuple(trackers)
@@ -1002,3 +1016,69 @@ def parse_last_run(data: Any) -> CleaningRunSummary | None:
 def fan_speeds_from_features(features: dict[str, Any] | None) -> list[str]:
     modes = [m for m in (features or {}).get("vacuuming_modes") or [] if m in FAN_SPEEDS]
     return [m for m in FAN_SPEEDS if m in modes] or list(FAN_SPEEDS)
+
+
+
+# --- VK7 maintenance trackers without the app ----------------------------------------
+#
+# The app's trackers ("clean brush", ...) count hours of the matching runtime
+# since the last reset. When the app no longer syncs, the hours continue from
+# the runtimes Home Assistant reads over Bluetooth.
+
+
+@dataclass(frozen=True)
+class TrackerBaseline:
+    hours: float  # tracker hours at the anchor
+    runtime_s: int  # runtime (of the tracker's source) at the anchor
+    anchor: str  # "cloud:<last sync>" or "reset:<iso time>"
+
+
+def vk7_source_runtime(live: Vk7Live | None, source: str) -> int | None:
+    if live is None:
+        return None
+    if source in ("eb7", "sp7"):
+        return live.attachments_s.get(source)
+    return live.runtimes_s.get(source if source == "motor" else "total")
+
+
+def _parse_iso(value: str | None) -> Any:
+    from datetime import datetime  # noqa: PLC0415
+
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def tracker_hours(
+    tracker: Vk7Tracker,
+    last_sync: str | None,
+    live: Vk7Live | None,
+    baseline: TrackerBaseline | None,
+) -> tuple[float | None, TrackerBaseline | None, str]:
+    """Hours of a tracker: (hours, baseline to keep, "bluetooth" or "cloud")."""
+    runtime = vk7_source_runtime(live, tracker.source)
+    if runtime is None or live is None or live.read_at is None:
+        return tracker.counted_hours, baseline, "cloud"
+    synced = _parse_iso(last_sync)
+    cloud_anchor = f"cloud:{last_sync}"
+    rebase = baseline is None
+    if baseline is not None and baseline.anchor.startswith("cloud:"):
+        rebase = baseline.anchor != cloud_anchor
+    elif baseline is not None and baseline.anchor.startswith("reset:"):
+        reset_at = _parse_iso(baseline.anchor[6:])
+        rebase = bool(synced and reset_at and synced > reset_at)  # app reset/sync is newer
+    if rebase:
+        if tracker.counted_hours is None or (synced and live.read_at < synced):
+            return tracker.counted_hours, baseline, "cloud"
+        baseline = TrackerBaseline(tracker.counted_hours, runtime, cloud_anchor)
+    hours = baseline.hours + max(0, runtime - baseline.runtime_s) / 3600
+    return round(hours, 2), baseline, "bluetooth"
+
+
+def tracker_progress(hours: float | None, tracker: Vk7Tracker) -> int | None:
+    if hours is None or not tracker.life_hours:
+        return tracker.progress
+    return int(hours / tracker.life_hours * 100)

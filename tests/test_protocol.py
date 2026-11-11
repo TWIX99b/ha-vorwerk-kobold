@@ -412,3 +412,53 @@ def test_features_and_navigation():
     assert body["runs"][0]["settings"] == {"mode": "eco", "navigation_mode": "extra_care"}
     assert protocol.build_cleaning_request("eco", navigation_mode="bogus")["runs"][0]["settings"][
         "navigation_mode"] == "normal"
+
+
+def test_tracker_hours():
+    from datetime import datetime, timezone
+
+    assert protocol.tracker_source(
+        "https://s3/kobold-product-catalog-images/trackers/eb_7_brush.png") == "eb7"
+    assert protocol.tracker_source(".../trackers/vk_7_motor_ptorection_filter.png") == "motor"
+    assert protocol.tracker_source(".../trackers/sp_7_cloth_carrier_frame.png") == "sp7"
+    assert protocol.tracker_source(None) == "total"
+
+    tracker = protocol.Vk7Tracker("177295", "Bürste reinigen", "cleaning", 45, 9.0, 20.0, (), "eb7")
+    sync = "2026-11-11T18:58:59Z"
+    live = protocol.Vk7Live(read_at=datetime(2026, 11, 11, 19, 36, tzinfo=timezone.utc))
+    live.attachments_s = {"eb7": 42530}
+
+    # no Bluetooth reading: the app's value
+    assert protocol.tracker_hours(tracker, sync, None, None) == (9.0, None, "cloud")
+
+    # first reading after the app sync anchors the tracker
+    hours, base, source = protocol.tracker_hours(tracker, sync, live, None)
+    assert (hours, source) == (9.0, "bluetooth") and base.runtime_s == 42530
+    assert base.anchor == f"cloud:{sync}"
+
+    # 1.5 h with the EB7 later
+    later = protocol.Vk7Live(read_at=datetime(2026, 11, 12, 19, 0, tzinfo=timezone.utc))
+    later.attachments_s = {"eb7": 42530 + 5400}
+    hours, base2, _ = protocol.tracker_hours(tracker, sync, later, base)
+    assert hours == 10.5 and base2 == base
+    assert protocol.tracker_progress(hours, tracker) == 52
+
+    # reset in Home Assistant, then 30 min more
+    reset = protocol.TrackerBaseline(0.0, 42530 + 5400, "reset:2026-11-12T19:05:00+00:00")
+    after = protocol.Vk7Live(read_at=datetime(2026, 11, 13, 9, 0, tzinfo=timezone.utc))
+    after.attachments_s = {"eb7": 42530 + 5400 + 1800}
+    hours, base3, _ = protocol.tracker_hours(tracker, sync, after, reset)
+    assert hours == 0.5 and base3 == reset
+
+    # a newer app sync wins over the reset in Home Assistant
+    newer_sync = "2026-11-13T10:00:00Z"
+    synced_tracker = protocol.Vk7Tracker("177295", "Bürste reinigen", "cleaning", 0, 0.0, 20.0, (), "eb7")
+    newest = protocol.Vk7Live(read_at=datetime(2026, 11, 13, 11, 0, tzinfo=timezone.utc))
+    newest.attachments_s = {"eb7": 50000}
+    hours, base4, _ = protocol.tracker_hours(synced_tracker, newer_sync, newest, reset)
+    assert hours == 0.0 and base4.anchor == f"cloud:{newer_sync}"
+
+    # reading older than the app sync: keep the app's value
+    stale = protocol.Vk7Live(read_at=datetime(2026, 11, 13, 9, 0, tzinfo=timezone.utc))
+    stale.attachments_s = {"eb7": 50000}
+    assert protocol.tracker_hours(synced_tracker, newer_sync, stale, None)[2] == "cloud"

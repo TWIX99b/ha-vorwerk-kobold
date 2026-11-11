@@ -58,6 +58,7 @@ from .protocol import (
     setting_payload,
     token_valid,
 )
+from .maintenance import Vk7Maintenance
 from .websocket import KoboldSocket
 
 _LOGGER = logging.getLogger(__name__)
@@ -130,6 +131,7 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
         self.navigation_mode: dict[str, str] = {}
         self.vk7: dict[str, Vk7Data] = {}
         self.vk7_readers: dict[str, Any] = {}
+        self.vk7_maintenance = Vk7Maintenance(hass, entry.entry_id)
         self._cycle = 0
         self._reauth_started = False
 

@@ -46,6 +46,10 @@ syncs from a **VK7** stick vacuum.
   VK7) the integration also reads the VK7 directly whenever it is awake (in
   use or charging): **battery level**, filter bag and runtimes, plus an *In
   Bluetooth range* sensor. It only sends the same read requests as the app.
+  The **maintenance trackers** then keep counting from these runtimes even if
+  the app no longer syncs, and each has a *done* button to start over after
+  the maintenance (this reset stays in Home Assistant, the app does not see
+  it).
 - **Proper login**: e-mail one-time code, token refresh, and a re-authentication
   flow instead of silently dying when the login expires.
 - English and German translations, diagnostics download.

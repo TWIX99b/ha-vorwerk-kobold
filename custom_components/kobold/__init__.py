@@ -161,6 +161,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: KoboldConfigEntry) -> bool:
     """Set up Vorwerk Kobold from a config entry."""
     coordinator = KoboldCoordinator(hass, entry)
+    await coordinator.vk7_maintenance.async_load()
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     if bluetooth_loaded(hass):
