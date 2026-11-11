@@ -375,3 +375,40 @@ def test_vk7_ble_protocol():
     assert live.last_event.runtime_s == 127804 and live.last_event.number == 2
     assert live.total_minutes == 2142.4
     assert protocol.parse_vk7_response(b"\x01\x00") is None
+
+
+def test_last_run():
+    history = [
+        {
+            "start_time": "2026-11-09T16:00:00Z",
+            "timing": {"charging": 0, "end": "2026-11-09T16:26:16Z", "error": 0, "pause": 0},
+            "started_by": "schedule",
+            "runs": [{"state": "done", "stats": {"area": 23.0368}, "settings": {"mode": "eco"},
+                      "autonomous_dock": True, "track_name": None}],
+        },
+        {
+            "start_time": "2026-11-11T09:00:00Z",
+            "timing": {"charging": 0, "end": "2026-11-11T13:25:56Z", "error": 0, "pause": 15926},
+            "started_by": "schedule",
+            "runs": [{"state": "canceled", "stats": {"area": 0.0}, "settings": {"mode": "eco"},
+                      "autonomous_dock": False}],
+        },
+    ]
+    run = protocol.parse_last_run(history)
+    assert run.start == "2026-11-11T09:00:00Z" and run.result == "canceled"
+    assert run.area == 0.0 and run.pause_s == 15926 and run.duration_s == 15956
+    assert run.docked is False and run.mode == "eco"
+    done = protocol.parse_last_run(history[:1])
+    assert done.result == "done" and done.area == 23.0 and done.duration_s == 1576
+    assert protocol.parse_last_run([]) is None
+
+
+def test_features_and_navigation():
+    assert protocol.fan_speeds_from_features({"vacuuming_modes": ["eco", "turbo", "pet", "auto"]}) == [
+        "auto", "eco", "turbo", "pet"]
+    assert protocol.fan_speeds_from_features({"vacuuming_modes": ["eco", "turbo"]}) == ["eco", "turbo"]
+    assert protocol.fan_speeds_from_features(None) == list(protocol.FAN_SPEEDS)
+    body = protocol.build_cleaning_request("eco", navigation_mode="extra_care")
+    assert body["runs"][0]["settings"] == {"mode": "eco", "navigation_mode": "extra_care"}
+    assert protocol.build_cleaning_request("eco", navigation_mode="bogus")["runs"][0]["settings"][
+        "navigation_mode"] == "normal"

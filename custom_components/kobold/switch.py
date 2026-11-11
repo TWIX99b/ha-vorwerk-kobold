@@ -28,6 +28,12 @@ class KoboldSettingSwitchDescription(SwitchEntityDescription):
 
 SETTING_SWITCHES: tuple[KoboldSettingSwitchDescription, ...] = (
     KoboldSettingSwitchDescription(
+        key="auto_update",
+        translation_key="auto_update",
+        setting="ota_updates",
+        field="auto",
+    ),
+    KoboldSettingSwitchDescription(
         key="sounds", translation_key="sounds", setting="sounds", field="enabled"
     ),
     KoboldSettingSwitchDescription(

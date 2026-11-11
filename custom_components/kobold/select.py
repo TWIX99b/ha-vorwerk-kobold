@@ -6,10 +6,11 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .coordinator import KoboldConfigEntry
-from .entity import KoboldSettingEntity
-from .protocol import language_code, language_option
+from .entity import KoboldEntity, KoboldSettingEntity
+from .protocol import NAVIGATION_MODES, language_code, language_option
 
 PARALLEL_UPDATES = 1
 
@@ -29,6 +30,10 @@ async def async_setup_entry(
             if robot_id not in added and robot.settings.get("robot_language", {}).get("language"):
                 added.add(robot_id)
                 new.append(KoboldLanguage(coordinator, robot_id))
+            nav_key = f"{robot_id}_navigation"
+            if nav_key not in added and robot.features.get("extra_care_navigation"):
+                added.add(nav_key)
+                new.append(KoboldNavigationMode(coordinator, robot_id))
         if new:
             async_add_entities(new)
 
@@ -67,3 +72,30 @@ class KoboldLanguage(KoboldSettingEntity, SelectEntity):
         await self.coordinator.async_set_setting(
             self.robot_id, "robot_language", language=language_code(option, self._available_codes)
         )
+
+
+class KoboldNavigationMode(KoboldEntity, SelectEntity, RestoreEntity):
+    """Navigation mode for runs started from Home Assistant (like the fan speed)."""
+
+    _attr_translation_key = "navigation_mode"
+    _attr_options = list(NAVIGATION_MODES)
+
+    def __init__(self, coordinator, robot_id: str) -> None:
+        super().__init__(coordinator, robot_id, "navigation_mode")
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if (last := await self.async_get_last_state()) is not None and last.state in NAVIGATION_MODES:
+            self.coordinator.navigation_mode[self.robot_id] = last.state
+
+    @property
+    def available(self) -> bool:
+        return self.robot_id in self.coordinator.robots
+
+    @property
+    def current_option(self) -> str:
+        return self.coordinator.navigation_mode.get(self.robot_id, "normal")
+
+    async def async_select_option(self, option: str) -> None:
+        self.coordinator.navigation_mode[self.robot_id] = option
+        self.async_write_ha_state()

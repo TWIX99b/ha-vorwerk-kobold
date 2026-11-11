@@ -37,6 +37,12 @@
       },
       "vk7_time_passive": {
         "default": "mdi:vacuum-outline"
+      },
+      "last_run": {
+        "default": "mdi:robot-vacuum",
+        "state": {
+          "canceled": "mdi:robot-vacuum-alert"
+        }
       }
     },
     "number": {
@@ -47,6 +53,9 @@
     "select": {
       "language": {
         "default": "mdi:translate"
+      },
+      "navigation_mode": {
+        "default": "mdi:map-marker-path"
       }
     },
     "switch": {
@@ -73,6 +82,9 @@
         "state": {
           "off": "mdi:calendar-remove"
         }
+      },
+      "auto_update": {
+        "default": "mdi:update"
       }
     }
   }

@@ -296,6 +296,7 @@ class Vk7BleReader:
         self._woken_at: float | None = None
         self.last_error: str | None = None
         self.last_success: Any = None
+        self.last_attempt_at: Any = None
 
     @callback
     def start(self) -> Callable[[], None]:
@@ -359,20 +360,37 @@ class Vk7BleReader:
             now = time.monotonic()
             if now < self._next_attempt:
                 return
-            self._last_attempt = now
             if not bluetooth.async_address_present(self.hass, self.address, connectable=True):
+                self._last_attempt = now
                 self._next_attempt = now + RETRY_AFTER_FAILURE.total_seconds()
                 return
             try:
-                live = await async_read_vk7(self.hass, self.address)
+                await self._read_locked(max_attempts=1)
             except (HomeAssistantError, TimeoutError) as err:
-                self.last_error = str(err)
                 delay = self._retry_delay(success=False)
                 _LOGGER.debug("VK7 not readable right now (retry in %ss): %s", int(delay), err)
                 self._next_attempt = time.monotonic() + delay
                 return
-            self.last_error = None
-            self.last_success = live.read_at
             self._next_attempt = time.monotonic() + self._retry_delay(success=True)
-            _LOGGER.debug("VK7 read: battery %s%%, bag %s", live.battery, live.bag)
-            self._on_data(live)
+
+    async def _read_locked(self, max_attempts: int) -> Vk7Live:
+        """Read once; the caller holds the lock."""
+        self._last_attempt = time.monotonic()
+        self.last_attempt_at = dt_util.utcnow()
+        try:
+            live = await async_read_vk7(self.hass, self.address, max_attempts=max_attempts)
+        except (HomeAssistantError, TimeoutError) as err:
+            self.last_error = str(err) or type(err).__name__
+            raise
+        self.last_error = None
+        self.last_success = live.read_at
+        _LOGGER.debug("VK7 read: battery %s%%, bag %s", live.battery, live.bag)
+        self._on_data(live)
+        return live
+
+    async def async_read_now(self) -> Vk7Live:
+        """Read right away (developer action); waits for a running read."""
+        async with self._lock:
+            live = await self._read_locked(max_attempts=2)
+            self._next_attempt = time.monotonic() + self._retry_delay(success=True)
+            return live

@@ -455,10 +455,12 @@ def build_cleaning_request(
     fan_speed: str,
     floorplan_uuid: str | None = None,
     track_uuids: list[str] | None = None,
+    navigation_mode: str = "normal",
 ) -> dict[str, Any]:
     """Build the body for ``POST /robots/{id}/cleaning/v2``."""
     mode = fan_speed if fan_speed in FAN_SPEEDS else "auto"
-    settings = {"mode": mode, "navigation_mode": "normal"}
+    navigation = navigation_mode if navigation_mode in ("normal", "extra_care", "deep") else "normal"
+    settings = {"mode": mode, "navigation_mode": navigation}
     if floorplan_uuid is None:
         runs = [{"settings": settings, "map": None}]
     elif track_uuids:
@@ -617,6 +619,7 @@ def language_code(option: str, available: list[str]) -> str:
 
 # Fields the app sends back in ``PUT /robots/{id}/settings/{name}`` ({"payload": ...}).
 SETTING_FIELDS: dict[str, tuple[str, ...]] = {
+    "ota_updates": ("auto",),
     "sounds": ("enabled", "volume", "voice"),
     "robot_language": ("language", "available_languages"),
     "object_avoidance": ("enabled", "streaming_level"),
@@ -917,3 +920,85 @@ def vk7_minutes_by_mode(live: Vk7Live) -> dict[str, int]:
     for kind, seconds in live.attachments_s.items():
         minutes[kind] = round(seconds / 60)
     return minutes
+
+
+# --- Cleaning history -------------------------------------------------------------
+
+RUN_RESULTS = ("done", "canceled", "other")
+NAVIGATION_MODES = ("normal", "extra_care")
+
+
+@dataclass(frozen=True)
+class CleaningRunSummary:
+    """The most recent cleaning run from the robot's history."""
+
+    start: str | None
+    end: str | None
+    result: str
+    area: float | None
+    duration_s: int | None
+    pause_s: int
+    error_s: int
+    charging_s: int
+    started_by: str | None
+    mode: str | None
+    zones: tuple[str, ...] = ()
+    docked: bool | None = None
+
+
+def _seconds_between(start: str | None, end: str | None) -> int | None:
+    from datetime import datetime  # noqa: PLC0415
+
+    if not start or not end:
+        return None
+    try:
+        a = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        b = datetime.fromisoformat(end.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return max(0, int((b - a).total_seconds()))
+
+
+def parse_last_run(data: Any) -> CleaningRunSummary | None:
+    """Summarise the newest entry of ``GET /robots/{id}/cleaningmaps``."""
+    newest: dict[str, Any] | None = None
+    for item in data or []:
+        item = _as_dict(item)
+        start = item.get("start_time") or _as_dict(item.get("timing")).get("start")
+        if not start:
+            continue
+        if newest is None or start > (newest.get("_start") or ""):
+            newest = {**item, "_start": start}
+    if newest is None:
+        return None
+    timing = _as_dict(newest.get("timing"))
+    runs = [_as_dict(r) for r in newest.get("runs") or []]
+    states = {str(r.get("state") or "").lower() for r in runs}
+    if states and states <= {"done"}:
+        result = "done"
+    elif "canceled" in states or "cancelled" in states:
+        result = "canceled"
+    else:
+        result = "other"
+    areas = [a for a in (_as_float(_as_dict(r.get("stats")).get("area")) for r in runs) if a is not None]
+    first_settings = _as_dict(runs[0].get("settings")) if runs else {}
+    end = timing.get("end")
+    return CleaningRunSummary(
+        start=newest["_start"],
+        end=end,
+        result=result,
+        area=round(sum(areas), 1) if areas else None,
+        duration_s=_seconds_between(newest["_start"], end),
+        pause_s=_as_int(timing.get("pause")) or 0,
+        error_s=_as_int(timing.get("error")) or 0,
+        charging_s=_as_int(timing.get("charging")) or 0,
+        started_by=newest.get("started_by"),
+        mode=first_settings.get("mode"),
+        zones=tuple(str(r["track_name"]) for r in runs if r.get("track_name")),
+        docked=bool(runs[-1].get("autonomous_dock")) if runs else None,
+    )
+
+
+def fan_speeds_from_features(features: dict[str, Any] | None) -> list[str]:
+    modes = [m for m in (features or {}).get("vacuuming_modes") or [] if m in FAN_SPEEDS]
+    return [m for m in FAN_SPEEDS if m in modes] or list(FAN_SPEEDS)

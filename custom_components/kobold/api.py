@@ -71,13 +71,16 @@ async def _request(
     headers: dict[str, str],
     json: Any = None,
     want: str = "json",
+    auth_on_403: bool = False,
 ) -> Any:
     try:
         async with session.request(
             method, url, headers=headers, json=json, timeout=TIMEOUT
         ) as resp:
             text = await resp.text()
-            if resp.status in (401, 403):
+            # 403 is also used for "not allowed for this robot"; only treat it as
+            # an expired login where it can only mean that
+            if resp.status == 401 or (resp.status == 403 and auth_on_403):
                 raise KoboldAuthError(f"HTTP {resp.status}: {text[:200]}")
             if resp.status >= 400:
                 raise KoboldApiError(resp.status, text)
@@ -113,6 +116,7 @@ class KoboldAuth:
             self._session,
             "POST",
             f"{AUTH_HOST}/passwordless/start",
+            auth_on_403=True,
             headers=self._headers(),
             json={
                 "client_id": AUTH_CLIENT_ID,
@@ -128,6 +132,7 @@ class KoboldAuth:
             self._session,
             "POST",
             f"{AUTH_HOST}/oauth/token",
+            auth_on_403=True,
             headers=self._headers(),
             json={
                 "client_id": AUTH_CLIENT_ID,
@@ -151,6 +156,7 @@ class KoboldAuth:
             self._session,
             "POST",
             f"{AUTH_HOST}/oauth/token",
+            auth_on_403=True,
             headers=self._headers(),
             json={
                 "client_id": AUTH_CLIENT_ID,
@@ -176,7 +182,14 @@ class KoboldApi:
         self._token = token
         self._market = market
 
-    async def _orbital(self, method: str, path: str, json: Any = None, app: bool = False) -> Any:
+    async def _orbital(
+        self,
+        method: str,
+        path: str,
+        json: Any = None,
+        app: bool = False,
+        auth_on_403: bool = False,
+    ) -> Any:
         headers = {
             "Authorization": f"Auth0Bearer {await self._token()}",
             "Accept": "application/vnd.neato.orbital-http.v1+json",
@@ -186,11 +199,16 @@ class KoboldApi:
         if app:
             headers.update(_app_headers(self._market))
         return await _request(
-            self._session, method, f"{ORBITAL_HOST}{path}", headers=headers, json=json
+            self._session,
+            method,
+            f"{ORBITAL_HOST}{path}",
+            headers=headers,
+            json=json,
+            auth_on_403=auth_on_403,
         )
 
     async def robots(self) -> list[dict[str, Any]]:
-        result = await self._orbital("GET", "/users/me/robots")
+        result = await self._orbital("GET", "/users/me/robots", auth_on_403=True)
         return [r for r in result or [] if isinstance(r, dict) and r.get("id")]
 
     async def floorplans(self, robot_id: str) -> list[dict[str, Any]]:
@@ -221,6 +239,10 @@ class KoboldApi:
         return await self._orbital(
             "PUT", f"/robots/{robot_id}/settings/{name}", json={"payload": payload}, app=True
         )
+
+    async def features(self, robot_id: str) -> dict[str, Any]:
+        result = await self._orbital("GET", f"/robots/{robot_id}/features", app=True)
+        return result if isinstance(result, dict) else {}
 
     async def get_scheduling(self, robot_id: str) -> dict[str, Any]:
         result = await self._orbital("GET", f"/robots/{robot_id}/scheduling", app=True)
@@ -319,6 +341,7 @@ class KoboldApi:
             f"{COMPANION_HOST}/api/v1/profile/login",
             headers=headers,
             want="response",
+            auth_on_403=True,
         )
         authorization = resp.headers.get("Authorization")
         if not authorization:

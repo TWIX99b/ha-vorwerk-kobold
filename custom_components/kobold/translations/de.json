@@ -149,6 +149,46 @@
       },
       "vk7_time_passive": {
         "name": "Saugzeit ohne Elektro-Aufsatz"
+      },
+      "last_run": {
+        "name": "Letzter Reinigungslauf",
+        "state": {
+          "done": "Abgeschlossen",
+          "canceled": "Abgebrochen",
+          "other": "Sonstiges"
+        },
+        "state_attributes": {
+          "start": {
+            "name": "Start"
+          },
+          "end": {
+            "name": "Ende"
+          },
+          "duration_min": {
+            "name": "Dauer (min)"
+          },
+          "pause_min": {
+            "name": "Pausiert (min)"
+          },
+          "error_min": {
+            "name": "Im Fehler (min)"
+          },
+          "area_m2": {
+            "name": "Fläche (m²)"
+          },
+          "started_by": {
+            "name": "Gestartet von"
+          },
+          "mode": {
+            "name": "Modus"
+          },
+          "rooms": {
+            "name": "Räume"
+          },
+          "returned_to_base": {
+            "name": "Zur Basis zurückgekehrt"
+          }
+        }
       }
     },
     "binary_sensor": {
@@ -192,6 +232,13 @@
           "zh_hans": "Chinesisch (vereinfacht)",
           "tr": "Türkisch"
         }
+      },
+      "navigation_mode": {
+        "name": "Navigationsmodus",
+        "state": {
+          "normal": "Normal",
+          "extra_care": "Besonders vorsichtig"
+        }
       }
     },
     "switch": {
@@ -209,6 +256,9 @@
       },
       "schedule": {
         "name": "Zeitplan {time} {days}"
+      },
+      "auto_update": {
+        "name": "Automatische Software-Updates"
       }
     }
   },

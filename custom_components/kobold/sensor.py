@@ -25,6 +25,7 @@ from .protocol import (
     CLEANING_ACTIONS,
     ERROR_OPTIONS,
     RETURNING_ACTIONS,
+    RUN_RESULTS,
     VK7_BAG_STATES,
     VK7_BATTERY_STATES,
     Vk7Data,
@@ -72,6 +73,28 @@ def robot_status(robot: RobotData) -> str | None:
     return "idle"
 
 
+def _last_run_attrs(robot: RobotData) -> dict[str, Any]:
+    run = robot.last_run
+    if run is None:
+        return {}
+
+    def minutes(seconds: int | None) -> float | None:
+        return round(seconds / 60, 1) if seconds is not None else None
+
+    return {
+        "start": run.start,
+        "end": run.end,
+        "duration_min": minutes(run.duration_s),
+        "pause_min": minutes(run.pause_s),
+        "error_min": minutes(run.error_s),
+        "area_m2": run.area,
+        "started_by": run.started_by,
+        "mode": run.mode,
+        "rooms": list(run.zones),
+        "returned_to_base": run.docked,
+    }
+
+
 def _error(robot: RobotData) -> str | None:
     return robot.state.error_option if robot.state else None
 
@@ -109,6 +132,7 @@ class KoboldSensorDescription(SensorEntityDescription):
     attrs: Callable[[RobotData], dict[str, Any]] = lambda _robot: {}
     needs_cleaning_center: bool = False
     needs_schedules: bool = False
+    needs_last_run: bool = False
 
 
 SENSORS: tuple[KoboldSensorDescription, ...] = (
@@ -160,6 +184,15 @@ SENSORS: tuple[KoboldSensorDescription, ...] = (
         needs_cleaning_center=True,
     ),
     KoboldSensorDescription(
+        key="last_run",
+        translation_key="last_run",
+        device_class=SensorDeviceClass.ENUM,
+        options=list(RUN_RESULTS),
+        value=lambda r: r.last_run.result if r.last_run else None,
+        attrs=_last_run_attrs,
+        needs_last_run=True,
+    ),
+    KoboldSensorDescription(
         key="next_cleaning",
         translation_key="next_cleaning",
         device_class=SensorDeviceClass.TIMESTAMP,
@@ -195,6 +228,17 @@ def _vk7_total_minutes(device: Vk7Data) -> float | None:
         return cloud
     # the app rounds differently; never go backwards (total_increasing)
     return max(live, cloud or 0)
+
+
+VK7_AREA_PER_MINUTE = 2  # m²; the app's statistics: total area = 2 x total minutes
+
+
+def _vk7_total_area(device: Vk7Data) -> float | None:
+    cloud = device.total_area
+    live = device.live.total_minutes if device.live else None
+    if live is None:
+        return cloud
+    return max(round(live * VK7_AREA_PER_MINUTE, 1), cloud or 0)
 
 
 def _vk7_mode_attrs(device: Vk7Data) -> dict[str, Any]:
@@ -272,7 +316,7 @@ VK7_SENSORS: tuple[KoboldVk7SensorDescription, ...] = (
         device_class=SensorDeviceClass.AREA,
         state_class=SensorStateClass.TOTAL_INCREASING,
         native_unit_of_measurement=UnitOfArea.SQUARE_METERS,
-        value=lambda d: d.total_area,
+        value=_vk7_total_area,
     ),
     KoboldVk7SensorDescription(
         key="last_sync",
@@ -338,6 +382,8 @@ async def async_setup_entry(
                     continue  # only bases with a dust bag (RB7) get these
                 if description.needs_schedules and not robot.schedules_loaded:
                     continue
+                if description.needs_last_run and robot.last_run is None:
+                    continue
                 added.add((rid, description.key))
                 new.append(KoboldSensor(coordinator, rid, description))
         for pid, device in coordinator.vk7.items():
@@ -377,6 +423,8 @@ class KoboldSensor(KoboldEntity, SensorEntity):
 
 
 class KoboldVk7Sensor(KoboldVk7Entity, RestoreSensor):
+    """A VK7 value from the app's cloud data and/or read over Bluetooth."""
+
     entity_description: KoboldVk7SensorDescription
 
     def __init__(self, coordinator, product_id: str, description: KoboldVk7SensorDescription) -> None:
@@ -390,6 +438,13 @@ class KoboldVk7Sensor(KoboldVk7Entity, RestoreSensor):
             self._restored = last.native_value
 
     @property
+    def available(self) -> bool:
+        if self.entity_description.needs_bluetooth:
+            # Bluetooth values do not depend on the cloud being reachable
+            return self.product_id in self.coordinator.vk7
+        return super().available
+
+    @property
     def native_value(self) -> Any:
         value = self.entity_description.value(self.device)
         if value is None and self.entity_description.restore:
@@ -398,7 +453,13 @@ class KoboldVk7Sensor(KoboldVk7Entity, RestoreSensor):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:
-        return self.entity_description.attrs(self.device) or None
+        attrs = dict(self.entity_description.attrs(self.device))
+        if self.entity_description.key == "bluetooth_read":
+            reader = self.coordinator.vk7_readers.get(self.product_id)
+            if reader is not None:
+                attrs["last_attempt"] = reader.last_attempt_at
+                attrs["status"] = "ok" if reader.last_error is None else "not_reachable"
+        return attrs or None
 
 
 class KoboldVk7TrackerSensor(KoboldVk7Entity, SensorEntity):

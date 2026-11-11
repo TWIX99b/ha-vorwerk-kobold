@@ -37,6 +37,7 @@ from .protocol import (
     SETTING_FIELDS,
     CleaningMap,
     CleaningProgress,
+    CleaningRunSummary,
     FloorPlan,
     RobotState,
     ScheduleEvent,
@@ -49,6 +50,7 @@ from .protocol import (
     parse_cleaning_maps,
     parse_cleaning_state,
     parse_floorplan,
+    parse_last_run,
     parse_robot_state,
     parse_scheduling,
     parse_zones,
@@ -80,6 +82,8 @@ class RobotData:
     last_seen: datetime | None = None
     floorplans: list[FloorPlan] = field(default_factory=list)
     last_cleaning_map: CleaningMap | None = None
+    last_run: CleaningRunSummary | None = None
+    features: dict[str, Any] = field(default_factory=dict)
     settings: dict[str, dict[str, Any]] = field(default_factory=dict)
     schedules: tuple[ScheduleEvent, ...] = ()
     schedules_loaded: bool = False
@@ -123,6 +127,7 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
         self.socket: KoboldSocket | None = None
         self.robots: dict[str, RobotData] = {}
         self.fan_speed: dict[str, str] = {}
+        self.navigation_mode: dict[str, str] = {}
         self.vk7: dict[str, Vk7Data] = {}
         self.vk7_readers: dict[str, Any] = {}
         self._cycle = 0
@@ -190,6 +195,10 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
     async def _load_maps(self) -> None:
         for robot in self.robots.values():
             try:
+                robot.features = await self.api.features(robot.robot_id) or robot.features
+            except KoboldError as err:
+                _LOGGER.debug("Could not load features of %s: %s", robot.name, err)
+            try:
                 plans = []
                 for raw in await self.api.floorplans(robot.robot_id):
                     plan = parse_floorplan(raw)
@@ -212,6 +221,7 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
                     robot.last_cleaning_map = (
                         parse_cleaning_maps(recent) or robot.last_cleaning_map
                     )
+                    robot.last_run = parse_last_run(recent) or robot.last_run
                 except KoboldApiError as err:
                     _LOGGER.debug("Could not load cleaning maps of %s: %s", robot.name, err)
             except KoboldApiError as err:
@@ -372,7 +382,10 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
         track_uuids: list[str] | None = None,
     ) -> None:
         body = build_cleaning_request(
-            self.fan_speed.get(robot_id, "auto"), floorplan_uuid, track_uuids
+            self.fan_speed.get(robot_id, "auto"),
+            floorplan_uuid,
+            track_uuids,
+            self.navigation_mode.get(robot_id, "normal"),
         )
         await self._call(self.api.start_cleaning(robot_id, body))
         await self._poke(robot_id)

@@ -132,9 +132,13 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         if not address:
             raise HomeAssistantError("No VK7 with a known Bluetooth address")
         if call.data["read"]:
-            live = await async_read_vk7(hass, address.upper(), max_attempts=2)
-            if owner:
-                owner[0].async_set_vk7_live(owner[1], live)
+            reader = owner[0].vk7_readers.get(owner[1]) if owner else None
+            if reader is not None:
+                live = await reader.async_read_now()
+            else:
+                live = await async_read_vk7(hass, address.upper(), max_attempts=2)
+                if owner:
+                    owner[0].async_set_vk7_live(owner[1], live)
             return json.loads(json.dumps(dataclasses.asdict(live), default=str))
         result = await async_probe(
             hass,

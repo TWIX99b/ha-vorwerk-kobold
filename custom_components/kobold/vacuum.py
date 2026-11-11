@@ -18,7 +18,7 @@ from homeassistant.helpers.restore_state import RestoreEntity
 
 from .coordinator import KoboldConfigEntry, KoboldCoordinator
 from .entity import KoboldEntity
-from .protocol import FAN_SPEEDS, segment_id, split_segment_id
+from .protocol import FAN_SPEEDS, fan_speeds_from_features, segment_id, split_segment_id
 
 try:  # HA 2026.3+
     from homeassistant.components.vacuum import Segment
@@ -56,7 +56,6 @@ class KoboldVacuum(KoboldEntity, StateVacuumEntity, RestoreEntity):
 
     _attr_name = None
     _attr_translation_key = "robot"
-    _attr_fan_speed_list = list(FAN_SPEEDS)
     _attr_supported_features = (
         VacuumEntityFeature.START
         | VacuumEntityFeature.PAUSE
@@ -83,6 +82,10 @@ class KoboldVacuum(KoboldEntity, StateVacuumEntity, RestoreEntity):
     def activity(self) -> VacuumActivity | None:
         state = self.robot.state
         return ACTIVITY.get(state.activity) if state else None
+
+    @property
+    def fan_speed_list(self) -> list[str]:
+        return fan_speeds_from_features(self.robot.features)
 
     @property
     def fan_speed(self) -> str:
@@ -148,7 +151,7 @@ class KoboldVacuum(KoboldEntity, StateVacuumEntity, RestoreEntity):
         await self.coordinator.async_send(self.robot_id, "utilities.find_me")
 
     async def async_set_fan_speed(self, fan_speed: str, **kwargs: Any) -> None:
-        if fan_speed not in FAN_SPEEDS:
+        if fan_speed not in self.fan_speed_list:
             raise HomeAssistantError(f"Unknown fan speed {fan_speed}")
         self.coordinator.fan_speed[self.robot_id] = fan_speed
         self.async_write_ha_state()

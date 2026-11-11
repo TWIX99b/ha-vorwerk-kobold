@@ -28,8 +28,14 @@ syncs from a **VK7** stick vacuum.
 - **Schedules**: every schedule of the app as a switch (turn it on/off) with
   days, time, mode and map as attributes, plus a *Next scheduled cleaning*
   sensor.
-- **Robot settings**: volume, sounds, voice assistant, voice language, object
-  avoidance and low-passage detection – handy when little hands keep changing
+- **Last cleaning run**: completed or cancelled, with start, end, duration,
+  pauses, area and who started it – e.g. to get notified when a scheduled run
+  did not finish.
+- **Navigation mode** for runs started from Home Assistant (normal or extra
+  care, if the robot supports it); the fan speeds offered follow the robot's
+  capabilities.
+- **Robot settings**: automatic software updates, volume, sounds, voice
+  assistant, voice language, object avoidance and low-passage detection – handy when little hands keep changing
   the language on the robot.
 - **VK7 stick vacuum**: the data the app syncs from the VK7 (battery health,
   filter bag, maintenance trackers such as *clean brush* in %, total time and

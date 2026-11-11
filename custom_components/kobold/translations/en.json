@@ -149,6 +149,46 @@
       },
       "vk7_time_passive": {
         "name": "Time without powered attachment"
+      },
+      "last_run": {
+        "name": "Last cleaning run",
+        "state": {
+          "done": "Completed",
+          "canceled": "Cancelled",
+          "other": "Other"
+        },
+        "state_attributes": {
+          "start": {
+            "name": "Start"
+          },
+          "end": {
+            "name": "End"
+          },
+          "duration_min": {
+            "name": "Duration (min)"
+          },
+          "pause_min": {
+            "name": "Paused (min)"
+          },
+          "error_min": {
+            "name": "In error (min)"
+          },
+          "area_m2": {
+            "name": "Area (m²)"
+          },
+          "started_by": {
+            "name": "Started by"
+          },
+          "mode": {
+            "name": "Mode"
+          },
+          "rooms": {
+            "name": "Rooms"
+          },
+          "returned_to_base": {
+            "name": "Returned to base"
+          }
+        }
       }
     },
     "binary_sensor": {
@@ -192,6 +232,13 @@
           "zh_hans": "Chinese (simplified)",
           "tr": "Turkish"
         }
+      },
+      "navigation_mode": {
+        "name": "Navigation mode",
+        "state": {
+          "normal": "Normal",
+          "extra_care": "Extra care"
+        }
       }
     },
     "switch": {
@@ -209,6 +256,9 @@
       },
       "schedule": {
         "name": "Schedule {time} {days}"
+      },
+      "auto_update": {
+        "name": "Automatic software updates"
       }
     }
   },
