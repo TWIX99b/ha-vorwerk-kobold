@@ -126,5 +126,21 @@
         "name": "Letzte Reinigung"
       }
     }
+  },
+  "services": {
+    "api_request": {
+      "name": "Cloud-Abfrage (Entwickler)",
+      "description": "Nur lesende GET-Abfrage an die Kobold-Cloud für die Entwicklung. {robot_id} und {serial} werden ersetzt.",
+      "fields": {
+        "path": {
+          "name": "Pfad",
+          "description": "API-Pfad"
+        },
+        "host": {
+          "name": "Host",
+          "description": "orbital oder companion"
+        }
+      }
+    }
   }
 }

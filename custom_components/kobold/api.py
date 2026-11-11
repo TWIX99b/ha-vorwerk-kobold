@@ -223,6 +223,31 @@ class KoboldApi:
             json={"ability": ability},
         )
 
+    async def raw_get(self, host: str, path: str) -> tuple[int, Any]:
+        """Developer helper: GET a cloud path and return (status, body)."""
+        if host == "companion":
+            authorization = await self.socket_authorization()
+            url = f"{COMPANION_HOST}{path}"
+            headers = {"Authorization": authorization, **_app_headers(self._market)}
+        else:
+            url = f"{ORBITAL_HOST}{path}"
+            headers = {
+                "Authorization": f"Auth0Bearer {await self._token()}",
+                "Accept": "application/vnd.neato.orbital-http.v1+json",
+                "User-Agent": APP_USER_AGENT,
+                **_app_headers(self._market),
+            }
+        try:
+            async with self._session.get(url, headers=headers, timeout=TIMEOUT) as resp:
+                text = await resp.text()
+                try:
+                    body: Any = await resp.json(content_type=None)
+                except ValueError:
+                    body = text[:2000]
+                return resp.status, body
+        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            raise KoboldConnectionError(str(err) or type(err).__name__) from err
+
     async def socket_authorization(self) -> str:
         """Log in to Companion and return the Authorization header for the socket."""
         headers = {"Authorization": f"Bearer {await self._token()}", **_app_headers(self._market)}

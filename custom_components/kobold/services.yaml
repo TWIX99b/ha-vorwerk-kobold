@@ -1,0 +1,14 @@
+api_request:
+  fields:
+    path:
+      required: true
+      example: "/robots/{robot_id}/features"
+      selector:
+        text:
+    host:
+      default: orbital
+      selector:
+        select:
+          options:
+            - orbital
+            - companion

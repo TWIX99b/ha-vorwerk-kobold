@@ -126,5 +126,21 @@
         "name": "Last cleaning"
       }
     }
+  },
+  "services": {
+    "api_request": {
+      "name": "Cloud request (developer)",
+      "description": "Read-only GET request against the Kobold cloud for development. {robot_id} and {serial} are replaced.",
+      "fields": {
+        "path": {
+          "name": "Path",
+          "description": "API path"
+        },
+        "host": {
+          "name": "Host",
+          "description": "orbital or companion"
+        }
+      }
+    }
   }
 }

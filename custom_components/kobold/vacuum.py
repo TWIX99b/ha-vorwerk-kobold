@@ -106,18 +106,40 @@ class KoboldVacuum(KoboldEntity, StateVacuumEntity, RestoreEntity):
         await self.coordinator.async_send(self.robot_id, "cleaning.pause")
 
     async def async_stop(self, **kwargs: Any) -> None:
+        """End the run and send the robot home.
+
+        A plain ``cleaning.cancel`` leaves the robot standing in the room and
+        the cloud then refuses ``navigation.return_to_base`` (HTTP 503), so
+        stopping always ends with the robot driving back to its base.
+        """
         state = self.robot.state
-        if state and "cancel" in state.commands:
-            await self.coordinator.async_send(self.robot_id, "cleaning.cancel")
-        else:
-            await self.coordinator.async_send(self.robot_id, "cleaning.pause")
+        if state and state.is_docked:
+            if "cancel" in state.commands:
+                await self.coordinator.async_send(self.robot_id, "cleaning.cancel")
+            return
+        await self.async_return_to_base()
 
     async def async_return_to_base(self, **kwargs: Any) -> None:
         state = self.robot.state
-        if state and "return_to_base" not in state.commands and "pause" in state.commands:
-            await self.coordinator.async_send(self.robot_id, "cleaning.pause")
-            await asyncio.sleep(2)
+        commands = state.commands if state else frozenset()
+        if state and not state.is_docked and "return_to_base" not in commands:
+            if "pause" in commands:
+                await self.coordinator.async_send(self.robot_id, "cleaning.pause")
+            elif "start" in commands:
+                # Robot stands idle in the room (e.g. after a cancel): the cloud
+                # only accepts "return to base" during a run, so start one first.
+                await self.coordinator.async_start(self.robot_id)
+            if not await self._wait_for_command("return_to_base", 30):
+                raise HomeAssistantError("The robot does not accept 'return to base' right now")
         await self.coordinator.async_send(self.robot_id, "navigation.return_to_base")
+
+    async def _wait_for_command(self, command: str, timeout: int) -> bool:
+        for _ in range(timeout):
+            state = self.robot.state
+            if state and command in state.commands:
+                return True
+            await asyncio.sleep(1)
+        return False
 
     async def async_locate(self, **kwargs: Any) -> None:
         await self.coordinator.async_send(self.robot_id, "utilities.find_me")
