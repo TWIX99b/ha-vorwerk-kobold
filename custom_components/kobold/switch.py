@@ -8,6 +8,7 @@ from typing import Any
 from homeassistant.components.switch import SwitchEntity, SwitchEntityDescription
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import KoboldConfigEntry, KoboldCoordinator
@@ -59,9 +60,27 @@ async def async_setup_entry(
 ) -> None:
     coordinator = entry.runtime_data
     added: set[tuple[str, str]] = set()
+    schedule_entities: dict[tuple[str, str], KoboldScheduleSwitch] = {}
+
+    @callback
+    def _remove_deleted_schedules() -> None:
+        """Drop switches of schedules that were deleted in the app."""
+        registry = er.async_get(hass)
+        for key, entity in list(schedule_entities.items()):
+            robot_id, uuid = key
+            robot = coordinator.robots.get(robot_id)
+            if robot is None or not robot.schedules_loaded:
+                continue
+            if any(event.uuid == uuid for event in robot.schedules):
+                continue
+            schedule_entities.pop(key)
+            added.discard(key)
+            if entity.entity_id and registry.async_get(entity.entity_id):
+                registry.async_remove(entity.entity_id)
 
     @callback
     def _add_new() -> None:
+        _remove_deleted_schedules()
         new: list[SwitchEntity] = []
         for robot_id, robot in coordinator.robots.items():
             for description in SETTING_SWITCHES:
@@ -73,12 +92,30 @@ async def async_setup_entry(
             for event in robot.schedules:
                 if (robot_id, event.uuid) not in added:
                     added.add((robot_id, event.uuid))
-                    new.append(KoboldScheduleSwitch(coordinator, robot_id, event))
+                    entity = KoboldScheduleSwitch(coordinator, robot_id, event)
+                    schedule_entities[(robot_id, event.uuid)] = entity
+                    new.append(entity)
         if new:
             async_add_entities(new)
 
     _add_new()
     entry.async_on_unload(coordinator.async_add_listener(_add_new))
+
+    # schedules deleted while Home Assistant was not running
+    registry = er.async_get(hass)
+    current = {
+        f"{robot.serial}_schedule_{event.uuid}"
+        for robot in coordinator.robots.values()
+        for event in robot.schedules
+    }
+    loaded_serials = {r.serial for r in coordinator.robots.values() if r.schedules_loaded}
+    for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        unique_id = reg_entry.unique_id
+        if reg_entry.domain != "switch" or "_schedule_" not in unique_id:
+            continue
+        serial = unique_id.split("_schedule_", 1)[0]
+        if serial in loaded_serials and unique_id not in current:
+            registry.async_remove(reg_entry.entity_id)
 
 
 class KoboldSettingSwitch(KoboldSettingEntity, SwitchEntity):
