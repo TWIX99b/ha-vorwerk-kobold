@@ -45,6 +45,24 @@ async def async_probe(
         raise HomeAssistantError("Bluetooth probe timed out") from err
 
 
+async def _connect(establish_connection: Any, client_class: Any, ble_device: Any, pair: bool) -> Any:
+    """Connect; with ``pair`` the bond is created right while connecting.
+
+    Devices that only accept bonded centrals drop an unencrypted connection
+    before a later ``pair()`` call could run, so pairing has to happen first.
+    """
+    if pair:
+        try:
+            return await establish_connection(
+                client_class, ble_device, "VK7", max_attempts=2, pair=True
+            )
+        except TypeError:
+            client = await establish_connection(client_class, ble_device, "VK7", max_attempts=2)
+            await client.pair()
+            return client
+    return await establish_connection(client_class, ble_device, "VK7", max_attempts=3)
+
+
 async def _probe(
     hass: HomeAssistant, address: str, pair: bool, listen_seconds: int
 ) -> dict[str, Any]:
@@ -78,18 +96,18 @@ async def _probe(
         )
         return result
 
-    client = await establish_connection(
-        BleakClientWithServiceCache, ble_device, "VK7", max_attempts=3
-    )
+    try:
+        client = await _connect(establish_connection, BleakClientWithServiceCache, ble_device, pair)
+    except Exception as err:  # noqa: BLE001 - report everything to the caller
+        _LOGGER.debug("VK7 connection failed: %s", err)
+        result["connect_error"] = str(err)
+        return result
     try:
         details = getattr(ble_device, "details", None)
         if isinstance(details, dict):
             result["connected_via"] = details.get("source")
         if pair:
-            try:
-                result["paired"] = await client.pair()
-            except Exception as err:  # noqa: BLE001 - report everything to the caller
-                result["pair_error"] = repr(err)
+            result["paired"] = True
         services = []
         notifiable = []
         for service in client.services:
