@@ -248,6 +248,14 @@ class KoboldApi:
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
             raise KoboldConnectionError(str(err) or type(err).__name__) from err
 
+    async def raw_ability(self, serial: str, ability: str) -> tuple[int, Any]:
+        """Developer helper: send a read-only ability and return (status, body)."""
+        try:
+            result = await self.send_ability(serial, ability)
+        except KoboldApiError as err:
+            return err.status, str(err)
+        return 200, result
+
     async def socket_authorization(self) -> str:
         """Log in to Companion and return the Authorization header for the socket."""
         headers = {"Authorization": f"Bearer {await self._token()}", **_app_headers(self._market)}

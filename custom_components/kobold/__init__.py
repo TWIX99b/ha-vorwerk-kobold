@@ -37,9 +37,12 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 SERVICE_API_REQUEST = "api_request"
 API_REQUEST_SCHEMA = vol.Schema(
     {
-        vol.Required("path"): vol.All(cv.string, vol.Match(r"^/[A-Za-z0-9_./?=&\-\[\]]*$")),
+        vol.Optional("path"): vol.All(cv.string, vol.Match(r"^/[A-Za-z0-9_./?=&{}\-\[\]]*$")),
         vol.Optional("host", default="orbital"): vol.In(["orbital", "companion"]),
-        vol.Optional("robot"): cv.string,
+        # read-only robot abilities only (x.show / x.get / x.list / x.info)
+        vol.Optional("ability"): vol.All(
+            cv.string, vol.Match(r"^[a-z_]+\.(show|get|list|info|status)$")
+        ),
     }
 )
 
@@ -66,12 +69,21 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         if not entries:
             raise HomeAssistantError("No Vorwerk Kobold account is set up")
         coordinator: KoboldCoordinator = entries[0].runtime_data
-        path: str = call.data["path"]
         robot = next(iter(coordinator.robots.values()), None)
-        if robot is not None:
-            path = path.replace("{robot_id}", robot.robot_id).replace("{serial}", robot.serial)
         try:
-            status, body = await coordinator.api.raw_get(call.data["host"], path)
+            if "ability" in call.data:
+                if robot is None:
+                    raise HomeAssistantError("No robot")
+                status, body = await coordinator.api.raw_ability(
+                    robot.serial, call.data["ability"]
+                )
+            else:
+                path: str = call.data.get("path") or "/users/me/robots"
+                if robot is not None:
+                    path = path.replace("{robot_id}", robot.robot_id).replace(
+                        "{serial}", robot.serial
+                    )
+                status, body = await coordinator.api.raw_get(call.data["host"], path)
         except KoboldError as err:
             raise HomeAssistantError(str(err)) from err
         body = _shorten(body)

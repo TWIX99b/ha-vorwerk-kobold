@@ -130,7 +130,7 @@
   "services": {
     "api_request": {
       "name": "Cloud request (developer)",
-      "description": "Read-only GET request against the Kobold cloud for development. {robot_id} and {serial} are replaced.",
+      "description": "Read-only request against the Kobold cloud for development: a GET path or a read-only robot ability. {robot_id} and {serial} are replaced.",
       "fields": {
         "path": {
           "name": "Path",
@@ -139,6 +139,10 @@
         "host": {
           "name": "Host",
           "description": "orbital or companion"
+        },
+        "ability": {
+          "name": "Ability",
+          "description": "Read-only robot ability (*.show, *.get, *.list)"
         }
       }
     }

@@ -1,7 +1,6 @@
 api_request:
   fields:
     path:
-      required: true
       example: "/robots/{robot_id}/features"
       selector:
         text:
@@ -12,3 +11,7 @@ api_request:
           options:
             - orbital
             - companion
+    ability:
+      example: "state.show"
+      selector:
+        text:
