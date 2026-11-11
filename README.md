@@ -15,9 +15,11 @@ your own language, and with native **clean by area** support.
   (auto / eco / turbo, remembered across restarts).
 - **Clean by area** (Home Assistant 2026.3+): map the rooms of your Kobold maps
   to Home Assistant areas once, then use `vacuum.clean_area` – no zone UUIDs.
-- **Sensors**: battery, status, error, dust bag, cleaned area of the current /
-  last run, base station (diagnostic); binary sensors for charging, docked and
-  problem; a *Locate* button.
+- **Map images**: the floor plan of every named Kobold map and a thumbnail of
+  the last cleaning run as image entities (refreshed after each run).
+- **Sensors**: battery, status, error, cleaned area of the current / last run;
+  dust bag and base station only with an RB7 service station; binary sensors
+  for charging, docked and problem; a *Locate* button.
 - **Proper login**: e-mail one-time code, token refresh, and a re-authentication
   flow instead of silently dying when the login expires.
 - English and German translations, diagnostics download.
@@ -61,8 +63,8 @@ Rooms of one call must be on the same Kobold map.
 
 Steuert den **Vorwerk Kobold VR7** aus Home Assistant: Live-Status, Start,
 Pause, Stopp, zur Basis, Roboter finden, Saugstufe, **Reinigung nach Bereichen**
-(`vacuum.clean_area`) sowie Sensoren für Akku, Status, Fehler, Staubbeutel und
-gereinigte Fläche.
+(`vacuum.clean_area`), **Kartenbilder** (Grundriss und letzte Reinigung) sowie
+Sensoren für Akku, Status, Fehler, Staubbeutel und gereinigte Fläche.
 
 **Einrichtung:** Über HACS als benutzerdefiniertes Repository hinzufügen,
 installieren, neu starten, dann *Einstellungen → Geräte & Dienste →

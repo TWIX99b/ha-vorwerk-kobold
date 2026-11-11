@@ -116,6 +116,14 @@
       "locate": {
         "name": "Locate"
       }
+    },
+    "image": {
+      "map": {
+        "name": "Map {name}"
+      },
+      "last_cleaning": {
+        "name": "Last cleaning"
+      }
     }
   }
 }

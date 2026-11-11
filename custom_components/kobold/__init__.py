@@ -10,6 +10,7 @@ from .coordinator import KoboldConfigEntry, KoboldCoordinator
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
+    Platform.IMAGE,
     Platform.SENSOR,
     Platform.VACUUM,
 ]

@@ -359,6 +359,19 @@ class FloorPlan:
     floorplan_uuid: str
     name: str
     zones: tuple[Zone, ...] = ()
+    image: bytes | None = field(default=None, repr=False, compare=False)
+    updated_at: str | None = None
+
+
+def decode_png(value: Any) -> bytes | None:
+    """Decode a base64 PNG from the cloud; None if it is not one."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        raw = base64.b64decode(value + "=" * (-len(value) % 4))
+    except (ValueError, TypeError):
+        return None
+    return raw if raw.startswith(b"\x89PNG") else None
 
 
 def parse_floorplan(data: Any) -> FloorPlan | None:
@@ -366,7 +379,47 @@ def parse_floorplan(data: Any) -> FloorPlan | None:
     uuid = data.get("floorplan_uuid")
     if not uuid:
         return None
-    return FloorPlan(floorplan_uuid=str(uuid), name=str(data.get("name") or "").strip())
+    image = decode_png(data.get("processed_rank_binary")) or decode_png(
+        data.get("processed_real_binary")
+    )
+    return FloorPlan(
+        floorplan_uuid=str(uuid),
+        name=str(data.get("name") or "").strip(),
+        image=image,
+        updated_at=data.get("updated_at") or data.get("promoted_at"),
+    )
+
+
+@dataclass(frozen=True)
+class CleaningMap:
+    """Thumbnail of a finished cleaning run."""
+
+    start: str | None
+    floorplan_uuid: str | None
+    started_by: str | None
+    image: bytes | None = field(default=None, repr=False, compare=False)
+
+
+def parse_cleaning_maps(data: Any) -> CleaningMap | None:
+    """Return the most recent cleaning map that has an image."""
+    best: CleaningMap | None = None
+    for item in data or []:
+        item = _as_dict(item)
+        image = decode_png(item.get("processed_thumb_rank_binary")) or decode_png(
+            item.get("processed_thumb_real_binary")
+        )
+        if image is None:
+            continue
+        start = item.get("start_time") or _as_dict(item.get("timing")).get("start")
+        candidate = CleaningMap(
+            start=start,
+            floorplan_uuid=item.get("floorplan_uuid"),
+            started_by=item.get("started_by"),
+            image=image,
+        )
+        if best is None or (start or "") > (best.start or ""):
+            best = candidate
+    return best
 
 
 def parse_zones(data: Any) -> tuple[Zone, ...]:

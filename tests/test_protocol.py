@@ -196,3 +196,29 @@ def test_cleaning_center_and_errors():
     assert stuck.error_option == "brush_stuck"
     assert set(protocol.KNOWN_ERRORS) < set(protocol.ERROR_OPTIONS)
     assert protocol.MODEL_NAMES["VRXX"] == "Kobold VR7"
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8
+
+
+def test_map_images():
+    png64 = base64.b64encode(PNG).decode()
+    plan = protocol.parse_floorplan(
+        {"floorplan_uuid": "fp", "name": "OG", "processed_rank_binary": png64, "updated_at": "2026-11-11T09:00:00Z"}
+    )
+    assert plan.image == PNG and plan.updated_at == "2026-11-11T09:00:00Z"
+    fallback = protocol.parse_floorplan(
+        {"floorplan_uuid": "fp", "processed_rank_binary": "notpng", "processed_real_binary": png64}
+    )
+    assert fallback.image == PNG
+    assert protocol.decode_png("eJzt") is None  # zlib, not png
+
+    last = protocol.parse_cleaning_maps(
+        [
+            {"start_time": "2026-11-10T09:00:00Z", "processed_thumb_rank_binary": png64},
+            {"start_time": "2026-11-11T09:00:00Z", "processed_thumb_rank_binary": png64, "started_by": "schedule"},
+            {"start_time": "2026-11-12T09:00:00Z"},  # no image
+        ]
+    )
+    assert last.start == "2026-11-11T09:00:00Z" and last.started_by == "schedule"
+    assert protocol.parse_cleaning_maps([]) is None

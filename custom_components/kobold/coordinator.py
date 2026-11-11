@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
 import logging
@@ -33,11 +34,13 @@ from .const import (
 )
 from .protocol import (
     MODEL_NAMES,
+    CleaningMap,
     CleaningProgress,
     FloorPlan,
     RobotState,
     SocketEvent,
     build_cleaning_request,
+    parse_cleaning_maps,
     parse_cleaning_state,
     parse_floorplan,
     parse_robot_state,
@@ -68,6 +71,7 @@ class RobotData:
     last_seen: datetime | None = None
     floorplans: list[FloorPlan] = field(default_factory=list)
     map_probe: dict[str, Any] = field(default_factory=dict)
+    last_cleaning_map: CleaningMap | None = None
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> RobotData:
@@ -179,13 +183,24 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
                         continue  # unnamed maps are temporary mapping runs
                     tracks = await self.api.tracks(plan.floorplan_uuid)
                     zones = parse_zones(tracks)
-                    plans.append(FloorPlan(plan.floorplan_uuid, plan.name, zones))
+                    plans.append(
+                        FloorPlan(
+                            plan.floorplan_uuid,
+                            plan.name,
+                            zones,
+                            image=plan.image,
+                            updated_at=plan.updated_at,
+                        )
+                    )
                     if "floorplan" not in probe:
                         probe["floorplan"] = probe_map(raw)
                         probe["track"] = probe_map(tracks[0]) if tracks else None
                 robot.floorplans = plans
                 try:
                     recent = await self.api.cleaning_maps(robot.robot_id)
+                    robot.last_cleaning_map = (
+                        parse_cleaning_maps(recent) or robot.last_cleaning_map
+                    )
                     probe["cleaning_maps_count"] = len(recent)
                     probe["cleaning_map"] = probe_map(recent[0]) if recent else None
                 except KoboldApiError as err:
@@ -193,6 +208,15 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
                 robot.map_probe = probe
             except KoboldApiError as err:
                 _LOGGER.debug("Could not load maps of %s: %s", robot.name, err)
+
+    async def _reload_maps_later(self) -> None:
+        await asyncio.sleep(60)  # the cloud needs a moment to render the map
+        try:
+            await self._load_maps()
+        except KoboldError as err:
+            _LOGGER.debug("Reloading maps failed: %s", err)
+            return
+        self.async_set_updated_data(self.robots)
 
     async def async_refresh_maps(self) -> None:
         try:
@@ -237,7 +261,14 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
         if robot is None:
             return
         if event.kind == "state":
+            before = robot.state.activity if robot.state else None
             robot.state = parse_robot_state(event.payload)
+            after = robot.state.activity
+            if before in ("cleaning", "returning", "paused") and after in ("docked", "idle"):
+                # a run just ended: fetch the new cleaning map
+                self.config_entry.async_create_background_task(
+                    self.hass, self._reload_maps_later(), f"{DOMAIN}_maps"
+                )
         elif event.kind == "cleaning":
             robot.cleaning = parse_cleaning_state(event.payload)
         else:
