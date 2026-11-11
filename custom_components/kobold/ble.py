@@ -189,8 +189,12 @@ REQUEST_TIMEOUT = 3
 READ_TIMEOUT = 60
 FIRST_READ_DELAY = 30  # s after start
 RETRY_AFTER_SUCCESS = timedelta(minutes=5)
-RETRY_AFTER_FAILURE = timedelta(minutes=15)
-AWAKE_MIN_GAP = 60  # s between reads triggered by a wake-up advertisement
+RETRY_AFTER_FAILURE = timedelta(minutes=10)
+AWAKE_WINDOW = timedelta(minutes=30)  # after a wake-up advertisement, try harder
+AWAKE_FAST_RETRIES = timedelta(minutes=3)  # first minutes: retry every 30 s
+AWAKE_RETRY_FAST = 30  # s
+AWAKE_RETRY_SLOW = 120  # s
+AWAKE_MIN_GAP = 20  # s between reads triggered by a wake-up advertisement
 
 
 class Vk7Unreachable(HomeAssistantError):
@@ -289,6 +293,7 @@ class Vk7BleReader:
         self._started = time.monotonic()
         self._last_attempt: float | None = None
         self._next_attempt = self._started + FIRST_READ_DELAY
+        self._woken_at: float | None = None
         self.last_error: str | None = None
         self.last_success: Any = None
 
@@ -303,7 +308,7 @@ class Vk7BleReader:
                 bluetooth.BluetoothCallbackMatcher(address=self.address, connectable=False),
                 bluetooth.BluetoothScanningMode.PASSIVE,
             ),
-            async_track_time_interval(self.hass, self._async_tick, timedelta(minutes=1)),
+            async_track_time_interval(self.hass, self._async_tick, timedelta(seconds=15)),
         ]
 
         @callback
@@ -320,14 +325,27 @@ class Vk7BleReader:
             return
         # a status payload instead of the address: the VK7 was just woken up
         now = time.monotonic()
+        if self._woken_at is None or now - self._woken_at > AWAKE_MIN_GAP:
+            _LOGGER.debug("VK7 wake-up advertisement: %s", payload.hex())
+        self._woken_at = now
         if self._last_attempt is None or now - self._last_attempt > AWAKE_MIN_GAP:
-            self._next_attempt = now
+            self._next_attempt = min(self._next_attempt, now)
             self._schedule()
 
     @callback
     def _async_tick(self, _now: Any) -> None:
         if time.monotonic() >= self._next_attempt:
             self._schedule()
+
+    def _retry_delay(self, success: bool) -> float:
+        now = time.monotonic()
+        if success:
+            return RETRY_AFTER_SUCCESS.total_seconds()
+        if self._woken_at is not None and now - self._woken_at < AWAKE_WINDOW.total_seconds():
+            if now - self._woken_at < AWAKE_FAST_RETRIES.total_seconds():
+                return AWAKE_RETRY_FAST
+            return AWAKE_RETRY_SLOW
+        return RETRY_AFTER_FAILURE.total_seconds()
 
     @callback
     def _schedule(self) -> None:
@@ -349,10 +367,12 @@ class Vk7BleReader:
                 live = await async_read_vk7(self.hass, self.address)
             except (HomeAssistantError, TimeoutError) as err:
                 self.last_error = str(err)
-                _LOGGER.debug("VK7 not readable right now: %s", err)
-                self._next_attempt = time.monotonic() + RETRY_AFTER_FAILURE.total_seconds()
+                delay = self._retry_delay(success=False)
+                _LOGGER.debug("VK7 not readable right now (retry in %ss): %s", int(delay), err)
+                self._next_attempt = time.monotonic() + delay
                 return
             self.last_error = None
             self.last_success = live.read_at
-            self._next_attempt = time.monotonic() + RETRY_AFTER_SUCCESS.total_seconds()
+            self._next_attempt = time.monotonic() + self._retry_delay(success=True)
+            _LOGGER.debug("VK7 read: battery %s%%, bag %s", live.battery, live.bag)
             self._on_data(live)
