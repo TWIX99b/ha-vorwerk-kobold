@@ -76,7 +76,20 @@
         }
       },
       "error": {
-        "name": "Error"
+        "name": "Error",
+        "state": {
+          "none": "No error",
+          "brush_stuck": "Brush stuck",
+          "bin_full": "Dust bin full",
+          "dustbin_missing": "Dust bin missing",
+          "cleaning_path_blocked": "Path blocked",
+          "navigation_path_problems_returning_home": "Cannot find the way back to the base",
+          "bumper_stuck": "Bumper stuck",
+          "wheel_stuck": "Wheel stuck",
+          "robot_stuck": "Robot stuck",
+          "battery_low": "Battery low",
+          "other": "Other error"
+        }
       },
       "bag": {
         "name": "Dust bag",

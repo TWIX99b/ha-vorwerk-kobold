@@ -32,6 +32,7 @@ from .const import (
     STALE_AFTER,
 )
 from .protocol import (
+    MODEL_NAMES,
     CleaningProgress,
     FloorPlan,
     RobotState,
@@ -72,7 +73,7 @@ class RobotData:
             robot_id=str(data["id"]),
             serial=str(data.get("serial") or data["id"]),
             name=str(data.get("name") or "Kobold"),
-            model=data.get("model_name") or None,
+            model=MODEL_NAMES.get(str(data.get("model_name")), data.get("model_name") or None),
             firmware=data.get("firmware") or None,
         )
 

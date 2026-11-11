@@ -13,12 +13,12 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfArea
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .coordinator import KoboldConfigEntry, RobotData
 from .entity import KoboldEntity
-from .protocol import BAG_STATES, CLEANING_ACTIONS, RETURNING_ACTIONS
+from .protocol import BAG_STATES, CLEANING_ACTIONS, ERROR_OPTIONS, RETURNING_ACTIONS
 
 PARALLEL_UPDATES = 0
 
@@ -58,24 +58,22 @@ def robot_status(robot: RobotData) -> str | None:
     return "idle"
 
 
-def _error_code(robot: RobotData) -> str | None:
-    state = robot.state
-    if state is None:
-        return None
-    if state.errors:
-        return state.errors[0].code
-    return state.base_error or "none"
+def _error(robot: RobotData) -> str | None:
+    return robot.state.error_option if robot.state else None
 
 
 def _error_attrs(robot: RobotData) -> dict[str, Any]:
     state = robot.state
-    if state is None or not state.errors:
+    if state is None or not (state.errors or state.base_error):
         return {}
-    return {
-        "errors": [
-            {"code": err.code, "severity": err.severity} for err in state.errors
-        ]
+    attrs: dict[str, Any] = {
+        "errors": [{"code": err.code, "severity": err.severity} for err in state.errors]
     }
+    if state.errors:
+        attrs["code"] = state.errors[0].code
+    if state.base_error:
+        attrs["base_error"] = state.base_error
+    return attrs
 
 
 def _cleaning_attrs(robot: RobotData) -> dict[str, Any]:
@@ -95,6 +93,7 @@ def _cleaning_attrs(robot: RobotData) -> dict[str, Any]:
 class KoboldSensorDescription(SensorEntityDescription):
     value: Callable[[RobotData], Any]
     attrs: Callable[[RobotData], dict[str, Any]] = lambda _robot: {}
+    needs_cleaning_center: bool = False
 
 
 SENSORS: tuple[KoboldSensorDescription, ...] = (
@@ -115,7 +114,9 @@ SENSORS: tuple[KoboldSensorDescription, ...] = (
     KoboldSensorDescription(
         key="error",
         translation_key="error",
-        value=_error_code,
+        device_class=SensorDeviceClass.ENUM,
+        options=list(ERROR_OPTIONS),
+        value=_error,
         attrs=_error_attrs,
     ),
     KoboldSensorDescription(
@@ -124,6 +125,7 @@ SENSORS: tuple[KoboldSensorDescription, ...] = (
         device_class=SensorDeviceClass.ENUM,
         options=list(BAG_STATES),
         value=lambda r: r.state.bag if r.state else None,
+        needs_cleaning_center=True,
     ),
     KoboldSensorDescription(
         key="cleaned_area",
@@ -140,6 +142,7 @@ SENSORS: tuple[KoboldSensorDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,
         value=lambda r: r.state.base_state if r.state else None,
+        needs_cleaning_center=True,
     ),
 )
 
@@ -150,11 +153,26 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     coordinator = entry.runtime_data
-    async_add_entities(
-        KoboldSensor(coordinator, rid, description)
-        for rid in coordinator.robots
-        for description in SENSORS
-    )
+    added: set[tuple[str, str]] = set()
+
+    @callback
+    def _add_new() -> None:
+        new = []
+        for rid, robot in coordinator.robots.items():
+            for description in SENSORS:
+                if (rid, description.key) in added:
+                    continue
+                if description.needs_cleaning_center and not (
+                    robot.state and robot.state.has_cleaning_center
+                ):
+                    continue  # only bases with a dust bag (RB7) get these
+                added.add((rid, description.key))
+                new.append(KoboldSensor(coordinator, rid, description))
+        if new:
+            async_add_entities(new)
+
+    _add_new()
+    entry.async_on_unload(coordinator.async_add_listener(_add_new))
 
 
 class KoboldSensor(KoboldEntity, SensorEntity):

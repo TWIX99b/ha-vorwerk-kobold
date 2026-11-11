@@ -31,6 +31,22 @@ FAN_SPEEDS = ("auto", "eco", "turbo")
 
 BAG_STATES = ("ok", "full", "missing", "other")
 
+# Error codes with a translated name; anything else is reported as "other"
+KNOWN_ERRORS = (
+    "brush_stuck",
+    "bin_full",
+    "dustbin_missing",
+    "cleaning_path_blocked",
+    "navigation_path_problems_returning_home",
+    "bumper_stuck",
+    "wheel_stuck",
+    "robot_stuck",
+    "battery_low",
+)
+ERROR_OPTIONS = ("none", *KNOWN_ERRORS, "other")
+
+MODEL_NAMES = {"VRXX": "Kobold VR7", "VR7": "Kobold VR7"}
+
 
 def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
@@ -100,6 +116,20 @@ class RobotState:
     @property
     def bag(self) -> str | None:
         return normalise_bag_status(self.bag_status)
+
+    @property
+    def has_cleaning_center(self) -> bool:
+        """True for bases that report a dust bag (e.g. the RB7 service station)."""
+        if self.bag_status or self.base_state:
+            return True
+        return self.base_type not in (None, "", "standard")
+
+    @property
+    def error_option(self) -> str:
+        if not self.errors:
+            return "none"
+        code = self.errors[0].code
+        return code if code in KNOWN_ERRORS else "other"
 
 
 def parse_robot_state(body: Any) -> RobotState:

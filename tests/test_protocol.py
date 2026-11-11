@@ -180,3 +180,19 @@ def test_cleaning_request():
     assert body["runs"][0]["settings"]["mode"] == "turbo"
     whole = protocol.build_cleaning_request("bogus")
     assert whole["runs"] == [{"settings": {"mode": "auto", "navigation_mode": "normal"}, "map": None}]
+
+
+def test_cleaning_center_and_errors():
+    standard = protocol.parse_robot_state(
+        {"details": {"base_type": "standard"}, "cleaning_center": {"bag_status": None}}
+    )
+    assert not standard.has_cleaning_center
+    assert standard.error_option == "none"
+    rb7 = protocol.parse_robot_state(STATE_DOCKED)
+    assert rb7.has_cleaning_center
+    odd = protocol.parse_robot_state({"errors": [{"code": "laser_on_fire"}]})
+    assert odd.error_option == "other"
+    stuck = protocol.parse_robot_state({"errors": [{"code": "brush_stuck"}]})
+    assert stuck.error_option == "brush_stuck"
+    assert set(protocol.KNOWN_ERRORS) < set(protocol.ERROR_OPTIONS)
+    assert protocol.MODEL_NAMES["VRXX"] == "Kobold VR7"

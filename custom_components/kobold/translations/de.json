@@ -76,7 +76,20 @@
         }
       },
       "error": {
-        "name": "Fehler"
+        "name": "Fehler",
+        "state": {
+          "none": "Kein Fehler",
+          "brush_stuck": "Bürste blockiert",
+          "bin_full": "Staubbehälter voll",
+          "dustbin_missing": "Staubbehälter fehlt",
+          "cleaning_path_blocked": "Weg blockiert",
+          "navigation_path_problems_returning_home": "Findet nicht zur Basis zurück",
+          "bumper_stuck": "Stoßfänger klemmt",
+          "wheel_stuck": "Rad blockiert",
+          "robot_stuck": "Roboter steckt fest",
+          "battery_low": "Akku leer",
+          "other": "Anderer Fehler"
+        }
       },
       "bag": {
         "name": "Staubbeutel",
