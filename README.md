@@ -29,6 +29,10 @@ your own language, and with native **clean by area** support.
 - **VK7 stick vacuum**: the data the app syncs from the VK7 (battery health,
   filter bag, maintenance trackers such as *clean brush* in %, total time and
   area). It only changes after the app has synced with the VK7 via Bluetooth.
+  With Home Assistant Bluetooth (local adapter or a proxy near the VK7) there
+  is also an *In Bluetooth range* sensor and a developer action
+  `kobold.vk7_ble_probe` that lists the VK7's Bluetooth services (read-only),
+  the first step towards reading the VK7 directly.
 - **Proper login**: e-mail one-time code, token refresh, and a re-authentication
   flow instead of silently dying when the login expires.
 - English and German translations, diagnostics download.

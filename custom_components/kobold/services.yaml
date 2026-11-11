@@ -15,3 +15,20 @@ api_request:
       example: "state.show"
       selector:
         text:
+vk7_ble_probe:
+  fields:
+    address:
+      example: "00:13:43:AA:BB:CC"
+      selector:
+        text:
+    pair:
+      default: false
+      selector:
+        boolean:
+    listen_seconds:
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 60
+          unit_of_measurement: s

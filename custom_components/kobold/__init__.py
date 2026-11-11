@@ -19,6 +19,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .api import KoboldError
+from .ble import async_probe
 from .const import DOMAIN
 
 from .coordinator import KoboldConfigEntry, KoboldCoordinator
@@ -45,6 +46,20 @@ API_REQUEST_SCHEMA = vol.Schema(
         # read-only robot abilities only (x.show / x.get / x.list / x.info)
         vol.Optional("ability"): vol.All(
             cv.string, vol.Match(r"^[a-z_]+\.(show|get|list|info|status)$")
+        ),
+    }
+)
+
+
+SERVICE_VK7_BLE_PROBE = "vk7_ble_probe"
+VK7_BLE_PROBE_SCHEMA = vol.Schema(
+    {
+        vol.Optional("address"): vol.All(
+            cv.string, vol.Match(r"^[0-9A-Fa-f]{2}(:[0-9A-Fa-f]{2}){5}$")
+        ),
+        vol.Optional("pair", default=False): cv.boolean,
+        vol.Optional("listen_seconds", default=0): vol.All(
+            vol.Coerce(int), vol.Range(min=0, max=60)
         ),
     }
 )
@@ -97,6 +112,32 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         SERVICE_API_REQUEST,
         _api_request,
         schema=API_REQUEST_SCHEMA,
+        supports_response=SupportsResponse.ONLY,
+    )
+
+    async def _vk7_ble_probe(call: ServiceCall) -> ServiceResponse:
+        address = call.data.get("address")
+        if address is None:
+            for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+                coordinator: KoboldCoordinator = entry.runtime_data
+                address = next((d.mac for d in coordinator.vk7.values() if d.mac), None)
+                if address:
+                    break
+        if not address:
+            raise HomeAssistantError("No VK7 with a known Bluetooth address")
+        result = await async_probe(
+            hass,
+            address.upper(),
+            pair=call.data["pair"],
+            listen_seconds=call.data["listen_seconds"],
+        )
+        return json.loads(json.dumps(result, default=str))
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_VK7_BLE_PROBE,
+        _vk7_ble_probe,
+        schema=VK7_BLE_PROBE_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
     return True

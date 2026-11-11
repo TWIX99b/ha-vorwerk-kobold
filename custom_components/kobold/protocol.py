@@ -655,6 +655,7 @@ class Vk7Data:
     serial: str
     name: str
     model: str = "VK7"
+    mac: str | None = None
     battery: str | None = None
     bag: str | None = None
     trackers: tuple[Vk7Tracker, ...] = ()
@@ -676,9 +677,34 @@ def find_vk7_products(products: Any) -> list[Vk7Data]:
                 product_id=str(item["id"]),
                 serial=str(item.get("serialNo") or item["id"]),
                 name=name,
+                mac=normalise_mac(item.get("macAddress")),
             )
         )
     return found
+
+
+def normalise_mac(value: Any) -> str | None:
+    text = "".join(c for c in str(value or "") if c in "0123456789abcdefABCDEF").upper()
+    if len(text) != 12:
+        return None
+    return ":".join(text[i : i + 2] for i in range(0, 12, 2))
+
+
+def describe_bytes(data: bytes | bytearray | None) -> dict[str, Any]:
+    """Hex, text (if printable) and little-endian integers of a GATT value."""
+    if data is None:
+        return {}
+    raw = bytes(data)
+    result: dict[str, Any] = {"hex": raw.hex(), "length": len(raw)}
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = None
+    if text and all(c.isprintable() or c in "\r\n\t" for c in text.rstrip("\x00")):
+        result["text"] = text.rstrip("\x00")
+    if 0 < len(raw) <= 8:
+        result["uint_le"] = int.from_bytes(raw, "little")
+    return result
 
 
 def _lower_option(value: Any, options: tuple[str, ...]) -> str | None:

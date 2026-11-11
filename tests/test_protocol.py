@@ -321,3 +321,16 @@ def test_vk7():
     assert vk7.total_area == 3536
     protocol.apply_vk7_health(vk7, {"batteryStatus": "SOMETHING_NEW"})
     assert vk7.battery is None
+
+
+def test_mac_and_bytes():
+    assert protocol.normalise_mac("00:13:43:f4:bc:ea") == "00:13:43:F4:BC:EA"
+    assert protocol.normalise_mac("001343F4BCEA") == "00:13:43:F4:BC:EA"
+    assert protocol.normalise_mac("nope") is None
+    (vk7,) = protocol.find_vk7_products(
+        [{"id": 1, "productId": "VK7", "macAddress": "00:13:43:F4:BC:EA"}]
+    )
+    assert vk7.mac == "00:13:43:F4:BC:EA"
+    assert protocol.describe_bytes(b"VK7\x00") == {"hex": "564b3700", "length": 4, "text": "VK7", "uint_le": 0x00374B56}
+    assert protocol.describe_bytes(b"\x10\x27") == {"hex": "1027", "length": 2, "uint_le": 10000}
+    assert "text" not in protocol.describe_bytes(b"\xff\xfe\x00\x01")

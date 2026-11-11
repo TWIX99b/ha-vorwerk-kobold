@@ -139,6 +139,9 @@
     "binary_sensor": {
       "docked": {
         "name": "Docked"
+      },
+      "vk7_in_range": {
+        "name": "In Bluetooth range"
       }
     },
     "button": {
@@ -210,6 +213,24 @@
         "ability": {
           "name": "Ability",
           "description": "Read-only robot ability (*.show, *.get, *.list)"
+        }
+      }
+    },
+    "vk7_ble_probe": {
+      "name": "VK7 Bluetooth probe",
+      "description": "Developer tool: connects to the VK7 over Home Assistant Bluetooth, lists its GATT services and reads readable values. Writes nothing.",
+      "fields": {
+        "address": {
+          "name": "Address",
+          "description": "Bluetooth address; defaults to the VK7 known from the MyKobold app."
+        },
+        "pair": {
+          "name": "Pair",
+          "description": "Try to pair (bond) first. The VK7 must be in pairing mode."
+        },
+        "listen_seconds": {
+          "name": "Listen",
+          "description": "Subscribe to all notifying characteristics and collect notifications for this many seconds."
         }
       }
     }
