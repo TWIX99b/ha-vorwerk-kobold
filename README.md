@@ -77,16 +77,19 @@ Rooms of one call must be on the same Kobold map.
 
 ## Notes
 
-- Only robots connected to the MyKobold cloud are supported (VR7; older
-  VR200/VR300 use a different, retired cloud). The VK7 stick vacuum only talks
-  Bluetooth to the app; Home Assistant sees what the app last uploaded.
+- Robots: the VR7 is supported. The older VR200/VR300 run on a different
+  Vorwerk cloud (the one the MyKobold app also uses for them) and are not
+  supported yet – testers with one of these robots are welcome, please open
+  an issue.
+- VK7 values come from what the MyKobold app last uploaded and, with Home
+  Assistant Bluetooth, directly from the VK7.
 - This uses the unofficial API of the MyKobold app and may break when Vorwerk
   changes it.
 - The Bluetooth part for the VK7 is experimental. The VK7 only accepts
   connections while it is awake (in use, and for a while afterwards while it
-  charges), so values update after use, not continuously. Close the MyKobold
-  app on your phone when you want Home Assistant to read it – the VK7 talks to
-  one device at a time.
+  charges), so values update after use, not continuously. It talks to one
+  device at a time: a phone paired with it through the MyKobold app can keep
+  Home Assistant from connecting.
 
 ---
 
