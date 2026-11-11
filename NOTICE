@@ -1,0 +1,10 @@
+Vorwerk Kobold for Home Assistant
+Copyright (c) 2026 Niklas Boose
+
+The cloud endpoints, the e-mail code login and the websocket message format of
+the MyKobold app were first documented in koboldVR7Integration by jmzg93
+(https://github.com/jmzg93/koboldVR7Integration), MIT License. This project is
+a new implementation; no source code was copied.
+
+Vorwerk and Kobold are trademarks of Vorwerk SE & Co. KG. This project is not
+affiliated with or endorsed by Vorwerk.

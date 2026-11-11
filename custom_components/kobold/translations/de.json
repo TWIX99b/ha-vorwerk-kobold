@@ -1,0 +1,108 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Vorwerk Kobold",
+        "description": "Melde dich mit der E-Mail-Adresse deiner MyKobold-App an. Du bekommst einen Einmal-Code per E-Mail.",
+        "data": {
+          "email": "E-Mail",
+          "market": "Land / Markt"
+        },
+        "data_description": {
+          "market": "Der Markt, zu dem dein MyKobold-Konto gehört."
+        }
+      },
+      "code": {
+        "title": "Code eingeben",
+        "description": "An {email} wurde ein Code geschickt. Gib ihn hier ein.",
+        "data": {
+          "otp": "Code"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Neu anmelden",
+        "description": "Die Anmeldung für {email} ist abgelaufen. Absenden, um einen neuen Code per E-Mail zu bekommen."
+      }
+    },
+    "error": {
+      "cannot_connect": "Die Kobold-Cloud ist nicht erreichbar.",
+      "invalid_email": "Diese E-Mail-Adresse wurde abgelehnt.",
+      "invalid_code": "Der Code ist falsch oder abgelaufen."
+    },
+    "abort": {
+      "already_configured": "Dieses Konto ist schon eingerichtet.",
+      "reauth_successful": "Erneut angemeldet.",
+      "no_robots": "In diesem Konto wurde kein Kobold-Saugroboter gefunden."
+    }
+  },
+  "selector": {
+    "market": {
+      "options": {
+        "de": "Deutschland / Österreich / Schweiz",
+        "en": "Großbritannien / International",
+        "fr": "Frankreich",
+        "it": "Italien",
+        "es": "Spanien"
+      }
+    }
+  },
+  "entity": {
+    "vacuum": {
+      "robot": {
+        "state_attributes": {
+          "fan_speed": {
+            "state": {
+              "auto": "Auto",
+              "eco": "Eco",
+              "turbo": "Turbo"
+            }
+          }
+        }
+      }
+    },
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "cleaning": "Reinigt",
+          "mapping": "Kartiert",
+          "spot_cleaning": "Spot-Reinigung",
+          "returning": "Fährt zur Basis",
+          "charging": "Lädt",
+          "docked": "In der Basis",
+          "idle": "Bereit",
+          "paused": "Pausiert",
+          "error": "Fehler"
+        }
+      },
+      "error": {
+        "name": "Fehler"
+      },
+      "bag": {
+        "name": "Staubbeutel",
+        "state": {
+          "ok": "OK",
+          "full": "Voll",
+          "missing": "Fehlt",
+          "other": "Sonstiges"
+        }
+      },
+      "cleaned_area": {
+        "name": "Gereinigte Fläche"
+      },
+      "base_state": {
+        "name": "Basisstation"
+      }
+    },
+    "binary_sensor": {
+      "docked": {
+        "name": "In der Basis"
+      }
+    },
+    "button": {
+      "locate": {
+        "name": "Roboter finden"
+      }
+    }
+  }
+}

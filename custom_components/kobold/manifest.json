@@ -1,0 +1,14 @@
+{
+  "domain": "kobold",
+  "name": "Vorwerk Kobold",
+  "codeowners": [
+    "@TWIX99b"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/TWIX99b/ha-vorwerk-kobold",
+  "integration_type": "hub",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/TWIX99b/ha-vorwerk-kobold/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

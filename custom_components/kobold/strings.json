@@ -1,0 +1,108 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Vorwerk Kobold",
+        "description": "Log in with the e-mail address of your MyKobold app. You will receive a one-time code by e-mail.",
+        "data": {
+          "email": "E-mail",
+          "market": "Country / market"
+        },
+        "data_description": {
+          "market": "The market your MyKobold account belongs to."
+        }
+      },
+      "code": {
+        "title": "Enter code",
+        "description": "A code was sent to {email}. Enter it here.",
+        "data": {
+          "otp": "Code"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Log in again",
+        "description": "The login for {email} has expired. Submit to receive a new code by e-mail."
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the Kobold cloud.",
+      "invalid_email": "This e-mail address was rejected.",
+      "invalid_code": "The code is wrong or expired."
+    },
+    "abort": {
+      "already_configured": "This account is already set up.",
+      "reauth_successful": "Logged in again.",
+      "no_robots": "No Kobold robot was found in this account."
+    }
+  },
+  "selector": {
+    "market": {
+      "options": {
+        "de": "Germany / Austria / Switzerland",
+        "en": "United Kingdom / International",
+        "fr": "France",
+        "it": "Italy",
+        "es": "Spain"
+      }
+    }
+  },
+  "entity": {
+    "vacuum": {
+      "robot": {
+        "state_attributes": {
+          "fan_speed": {
+            "state": {
+              "auto": "Auto",
+              "eco": "Eco",
+              "turbo": "Turbo"
+            }
+          }
+        }
+      }
+    },
+    "sensor": {
+      "status": {
+        "name": "Status",
+        "state": {
+          "cleaning": "Cleaning",
+          "mapping": "Mapping",
+          "spot_cleaning": "Spot cleaning",
+          "returning": "Returning to base",
+          "charging": "Charging",
+          "docked": "Docked",
+          "idle": "Idle",
+          "paused": "Paused",
+          "error": "Error"
+        }
+      },
+      "error": {
+        "name": "Error"
+      },
+      "bag": {
+        "name": "Dust bag",
+        "state": {
+          "ok": "OK",
+          "full": "Full",
+          "missing": "Missing",
+          "other": "Other"
+        }
+      },
+      "cleaned_area": {
+        "name": "Cleaned area"
+      },
+      "base_state": {
+        "name": "Base station"
+      }
+    },
+    "binary_sensor": {
+      "docked": {
+        "name": "Docked"
+      }
+    },
+    "button": {
+      "locate": {
+        "name": "Locate"
+      }
+    }
+  }
+}

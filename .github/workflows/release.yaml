@@ -1,0 +1,22 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write  # create the GitHub release for HACS
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check manifest version matches tag
+        run: |
+          version=$(python3 -c "import json;print(json.load(open('custom_components/kobold/manifest.json'))['version'])")
+          test "v${version}" = "${GITHUB_REF_NAME}"
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
