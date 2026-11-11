@@ -12,7 +12,7 @@ your own language, and with native **clean by area** support.
 - **Live status** over the MyKobold cloud connection (push, no polling), with
   automatic reconnect and a periodic fallback refresh.
 - **Vacuum entity**: start, pause, stop, return to base, locate, fan speed
-  (auto / eco / turbo, remembered across restarts).
+  (auto / eco / turbo / pet, remembered across restarts).
 - **Clean by area** (Home Assistant 2026.3+): map the rooms of your Kobold maps
   to Home Assistant areas once, then use `vacuum.clean_area` – no zone UUIDs.
 - **Map images**: the floor plan of every named Kobold map and a thumbnail of

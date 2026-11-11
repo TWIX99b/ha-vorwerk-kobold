@@ -27,7 +27,7 @@ CLEANING_ACTIONS = frozenset(
 )
 RETURNING_ACTIONS = frozenset({"docking", "returning", "going_home"})
 
-FAN_SPEEDS = ("auto", "eco", "turbo")
+FAN_SPEEDS = ("auto", "eco", "turbo", "pet")
 
 BAG_STATES = ("ok", "full", "missing", "other")
 
@@ -485,56 +485,3 @@ def build_cleaning_request(
             }
         ]
     return {"runs": runs, "ability": "cleaning.start"}
-
-
-# --- Map payload probing (diagnostics only) -----------------------------------
-
-_MAGIC = {
-    b"\x89PNG": "png",
-    b"\xff\xd8\xff": "jpeg",
-    b"GIF8": "gif",
-    b"\x1f\x8b": "gzip",
-    b"RIFF": "riff/webp",
-    b"<svg": "svg",
-    b"<?xm": "xml",
-    b"{": "json",
-}
-
-
-def describe_blob(value: Any) -> dict[str, Any]:
-    """Describe an unknown map field without returning its content."""
-    info: dict[str, Any] = {"type": type(value).__name__}
-    if isinstance(value, (list, dict)):
-        info["len"] = len(value)
-        if isinstance(value, dict):
-            info["keys"] = sorted(value)[:20]
-        return info
-    if not isinstance(value, str):
-        info["value"] = value if isinstance(value, (int, float, bool)) or value is None else None
-        return info
-    info["len"] = len(value)
-    if value.startswith(("http://", "https://")):
-        info["kind"] = "url"
-        info["host"] = value.split("/")[2]
-        return info
-    raw: bytes | None = None
-    try:
-        raw = base64.b64decode(value + "=" * (-len(value) % 4), validate=False)
-    except (ValueError, TypeError):
-        raw = None
-    if raw:
-        info["decoded_len"] = len(raw)
-        info["head_hex"] = raw[:12].hex()
-        for magic, kind in _MAGIC.items():
-            if raw.startswith(magic):
-                info["kind"] = f"base64 {kind}"
-                break
-        else:
-            info["kind"] = "base64 unknown"
-    return info
-
-
-def probe_map(data: Any) -> dict[str, Any]:
-    """Summarise every field of a map/track/cleaning-map object."""
-    data = _as_dict(data)
-    return {key: describe_blob(value) for key, value in sorted(data.items())}

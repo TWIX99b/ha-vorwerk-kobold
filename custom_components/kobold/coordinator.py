@@ -31,7 +31,6 @@ from .const import (
     DOMAIN,
     REFRESH_INTERVAL,
     STALE_AFTER,
-    VENDOR_ID,
 )
 from .protocol import (
     MODEL_NAMES,
@@ -46,7 +45,6 @@ from .protocol import (
     parse_floorplan,
     parse_robot_state,
     parse_zones,
-    probe_map,
     token_valid,
 )
 from .websocket import KoboldSocket
@@ -71,7 +69,6 @@ class RobotData:
     cleaning: CleaningProgress | None = None
     last_seen: datetime | None = None
     floorplans: list[FloorPlan] = field(default_factory=list)
-    map_probe: dict[str, Any] = field(default_factory=dict)
     last_cleaning_map: CleaningMap | None = None
 
     @classmethod
@@ -115,7 +112,6 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
         self.fan_speed: dict[str, str] = {}
         self._cycle = 0
         self._reauth_started = False
-        self.api_probe: dict[str, Any] = {}
 
     # --- tokens -----------------------------------------------------------
 
@@ -158,11 +154,6 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
                 raise UpdateFailed(f"Kobold cloud not reachable: {err}") from err
             _LOGGER.debug("Kobold refresh failed, keeping old data: %s", err)
 
-        if not self.api_probe and self.robots:
-            self.config_entry.async_create_background_task(
-                self.hass, self._probe_api(), f"{DOMAIN}_probe"
-            )
-
         if self.socket is None:
             self._start_socket()
         elif self.socket.connected:
@@ -183,7 +174,6 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
         for robot in self.robots.values():
             try:
                 plans = []
-                probe: dict[str, Any] = {}
                 for raw in await self.api.floorplans(robot.robot_id):
                     plan = parse_floorplan(raw)
                     if plan is None or not plan.name:
@@ -199,43 +189,16 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
                             updated_at=plan.updated_at,
                         )
                     )
-                    if "floorplan" not in probe:
-                        probe["floorplan"] = probe_map(raw)
-                        probe["track"] = probe_map(tracks[0]) if tracks else None
                 robot.floorplans = plans
                 try:
                     recent = await self.api.cleaning_maps(robot.robot_id)
                     robot.last_cleaning_map = (
                         parse_cleaning_maps(recent) or robot.last_cleaning_map
                     )
-                    probe["cleaning_maps_count"] = len(recent)
-                    probe["cleaning_map"] = probe_map(recent[0]) if recent else None
                 except KoboldApiError as err:
-                    probe["cleaning_maps_error"] = str(err)
-                robot.map_probe = probe
+                    _LOGGER.debug("Could not load cleaning maps of %s: %s", robot.name, err)
             except KoboldApiError as err:
                 _LOGGER.debug("Could not load maps of %s: %s", robot.name, err)
-
-    async def _probe_api(self) -> None:
-        """Look for schedule endpoints (read-only); result goes to diagnostics."""
-        robot = next(iter(self.robots.values()))
-        rid, serial = robot.robot_id, robot.serial
-        self.api_probe = {"running": True}
-        probe: dict[str, Any] = {}
-        for path in (
-            f"/robots/{rid}/features",
-            f"/robots/{rid}/schedules",
-            f"/robots/{rid}/schedule",
-            f"/robots/{rid}/cleaning_schedules",
-            f"/robots/{rid}",
-        ):
-            probe[f"GET {path.replace(rid, '<id>')}"] = await self.api.probe("GET", path)
-        probe["ability schedule.show"] = await self.api.probe(
-            "POST",
-            f"/vendors/{VENDOR_ID}/robots/{serial}/messages",
-            json={"ability": "schedule.show"},
-        )
-        self.api_probe = probe
 
     async def _reload_maps_later(self) -> None:
         await asyncio.sleep(60)  # the cloud needs a moment to render the map

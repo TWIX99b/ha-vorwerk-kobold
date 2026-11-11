@@ -54,7 +54,8 @@
             "state": {
               "auto": "Auto",
               "eco": "Eco",
-              "turbo": "Turbo"
+              "turbo": "Turbo",
+              "pet": "Pet"
             }
           }
         }
