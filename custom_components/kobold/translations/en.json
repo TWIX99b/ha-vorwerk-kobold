@@ -134,6 +134,9 @@
       },
       "vk7_last_sync": {
         "name": "Last app sync"
+      },
+      "vk7_bluetooth_read": {
+        "name": "Last Bluetooth reading"
       }
     },
     "binary_sensor": {
@@ -231,6 +234,10 @@
         "listen_seconds": {
           "name": "Listen",
           "description": "Subscribe to all notifying characteristics and collect notifications for this many seconds."
+        },
+        "read": {
+          "name": "Read data",
+          "description": "Read battery, filter bag, runtimes and the latest event like the app does (instead of listing services)."
         }
       }
     }

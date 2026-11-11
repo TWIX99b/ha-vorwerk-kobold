@@ -64,8 +64,9 @@ async def async_get_config_entry_diagnostics(
             "total_minutes": device.total_minutes,
             "total_area": device.total_area,
             "last_sync": device.last_sync,
+            "bluetooth": _vk7_bluetooth(coordinator, product_id, device),
         }
-        for index, device in enumerate(coordinator.vk7.values())
+        for index, (product_id, device) in enumerate(coordinator.vk7.items())
     }
     return {
         "entry": async_redact_data(dict(entry.data), TO_REDACT),
@@ -73,3 +74,28 @@ async def async_get_config_entry_diagnostics(
         "robots": async_redact_data(robots, TO_REDACT),
         "vk7": vk7,
     }
+
+
+def _vk7_bluetooth(coordinator, product_id: str, device) -> dict[str, Any] | None:
+    reader = coordinator.vk7_readers.get(product_id)
+    live = device.live
+    if reader is None and live is None:
+        return None
+    result: dict[str, Any] = {}
+    if reader is not None:
+        result["last_error"] = reader.last_error
+        result["last_success"] = str(reader.last_success) if reader.last_success else None
+    if live is not None:
+        result["live"] = {
+            "read_at": str(live.read_at),
+            "battery": live.battery,
+            "battery_absolute": live.battery_absolute,
+            "battery_extra": live.battery_extra,
+            "bag_code": live.bag_code,
+            "runtimes_s": live.runtimes_s,
+            "attachments_s": live.attachments_s,
+            "attachment_types": live.attachment_types,
+            "event_counter": live.event_counter,
+            "last_event": repr(live.last_event),
+        }
+    return result

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import dataclasses
+from functools import partial
 import json
 from typing import Any
 
@@ -19,7 +21,7 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .api import KoboldError
-from .ble import async_probe
+from .ble import Vk7BleReader, async_probe, async_read_vk7, bluetooth_loaded
 from .const import DOMAIN
 
 from .coordinator import KoboldConfigEntry, KoboldCoordinator
@@ -61,6 +63,7 @@ VK7_BLE_PROBE_SCHEMA = vol.Schema(
         vol.Optional("listen_seconds", default=0): vol.All(
             vol.Coerce(int), vol.Range(min=0, max=60)
         ),
+        vol.Optional("read", default=False): cv.boolean,
     }
 )
 
@@ -117,14 +120,22 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     async def _vk7_ble_probe(call: ServiceCall) -> ServiceResponse:
         address = call.data.get("address")
-        if address is None:
-            for entry in hass.config_entries.async_loaded_entries(DOMAIN):
-                coordinator: KoboldCoordinator = entry.runtime_data
-                address = next((d.mac for d in coordinator.vk7.values() if d.mac), None)
-                if address:
+        owner: tuple[KoboldCoordinator, str] | None = None
+        for entry in hass.config_entries.async_loaded_entries(DOMAIN):
+            coordinator: KoboldCoordinator = entry.runtime_data
+            for product_id, device in coordinator.vk7.items():
+                if device.mac and (address is None or device.mac == address.upper()):
+                    address, owner = device.mac, (coordinator, product_id)
                     break
+            if owner:
+                break
         if not address:
             raise HomeAssistantError("No VK7 with a known Bluetooth address")
+        if call.data["read"]:
+            live = await async_read_vk7(hass, address.upper(), max_attempts=2)
+            if owner:
+                owner[0].async_set_vk7_live(owner[1], live)
+            return json.loads(json.dumps(dataclasses.asdict(live), default=str))
         result = await async_probe(
             hass,
             address.upper(),
@@ -148,6 +159,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: KoboldConfigEntry) -> bo
     coordinator = KoboldCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
+    if bluetooth_loaded(hass):
+        for product_id, device in coordinator.vk7.items():
+            if not device.mac:
+                continue
+            reader = Vk7BleReader(
+                hass,
+                device.mac,
+                partial(coordinator.async_set_vk7_live, product_id),
+                lambda coro: entry.async_create_background_task(
+                    hass, coro, f"{DOMAIN}_vk7_read"
+                ),
+            )
+            coordinator.vk7_readers[product_id] = reader
+            entry.async_on_unload(reader.start())
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

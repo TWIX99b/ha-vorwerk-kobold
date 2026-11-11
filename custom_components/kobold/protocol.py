@@ -663,6 +663,7 @@ class Vk7Data:
     minutes_by_mode: dict[str, int] = field(default_factory=dict)
     total_area: float | None = None
     last_sync: str | None = None
+    live: Vk7Live | None = None
 
 
 def find_vk7_products(products: Any) -> list[Vk7Data]:
@@ -757,3 +758,162 @@ def apply_vk7_log(device: Vk7Data, data: Any) -> None:
     }
     device.total_area = _as_float(data.get("totalAreaVacuumed"))
     device.last_sync = data.get("lastSynchronizationDate") or device.last_sync
+
+
+# --- VK7 over Bluetooth LE ------------------------------------------------------
+#
+# The VK7 exposes one characteristic (write + indicate). The app writes read
+# requests ``01 00 <index:2 BE> <sub:1> <param:2 BE>`` and the VK7 answers with an
+# indication ``00 00 <index:2 BE> <sub:1> <data...>`` (values little endian).
+
+VK7_SERVICE_UUID = "c3e60000-097d-4165-9559-939658737507"
+VK7_CHAR_UUID = "c3e60010-097d-4165-9559-939658737507"
+
+VK7_IDX_MAC = 0x0CC9
+VK7_IDX_BATTERY = 0x0D53  # sub 1: charge in %, sub 2: absolute state of charge
+VK7_IDX_BATTERY_EXTRA = 0x0D55  # sub 3: signed value, probably the battery current
+VK7_IDX_FILTER_BAG = 0x0E8C  # sub 1: 0 empty (1 half full, 2 full assumed)
+VK7_IDX_EVENT_INFO = 0x1776  # sub 1 size, sub 2 current index, sub 3 total counter
+VK7_IDX_EVENT_LOG = 0x1777  # sub 0, param = entry index
+VK7_IDX_RUNTIME = 0x17F7  # subs 1-5, seconds
+VK7_IDX_ATTACHMENTS = 0x17F8  # sub 1 device types, sub 2 runtimes in seconds
+
+VK7_RUNTIME_SUBS = {1: "total", 2: "motor", 3: "passive", 4: "electric", 5: "spb100"}
+VK7_ATTACHMENT_TYPES = {3: "eb7", 5: "sp7"}
+_VK7_BAG_CODES = {0: "empty", 1: "half_full", 2: "full"}
+
+# what the app reads during a sync, in this order
+VK7_READ_PLAN: tuple[tuple[int, int, int], ...] = (
+    (VK7_IDX_MAC, 1, 0),
+    (VK7_IDX_BATTERY, 1, 1),
+    (VK7_IDX_BATTERY, 2, 0),
+    (VK7_IDX_BATTERY_EXTRA, 3, 0),
+    (VK7_IDX_FILTER_BAG, 1, 0),
+    *((VK7_IDX_RUNTIME, sub, 0) for sub in VK7_RUNTIME_SUBS),
+    (VK7_IDX_ATTACHMENTS, 1, 0),
+    (VK7_IDX_ATTACHMENTS, 2, 0),
+    (VK7_IDX_EVENT_INFO, 1, 0),
+    (VK7_IDX_EVENT_INFO, 2, 0),
+    (VK7_IDX_EVENT_INFO, 3, 0),
+)
+
+
+def vk7_read_request(index: int, sub: int, param: int = 0) -> bytes:
+    return bytes([0x01, 0x00, index >> 8, index & 0xFF, sub, param >> 8, param & 0xFF])
+
+
+def parse_vk7_response(data: bytes | bytearray) -> tuple[int, int, bytes] | None:
+    raw = bytes(data)
+    if len(raw) < 5 or raw[0] != 0x00:
+        return None
+    return (raw[2] << 8) | raw[3], raw[4], raw[5:]
+
+
+def _u32(data: bytes, offset: int = 0) -> int | None:
+    return int.from_bytes(data[offset : offset + 4], "little") if len(data) >= offset + 4 else None
+
+
+@dataclass
+class Vk7Event:
+    index: int
+    runtime_s: int
+    event_type: int
+    source: int
+    warning: int
+    number: int
+
+
+@dataclass
+class Vk7Live:
+    """Values read directly from the VK7 over Bluetooth."""
+
+    read_at: Any = None
+    battery: int | None = None
+    battery_absolute: int | None = None
+    battery_extra: int | None = None
+    bag: str | None = None
+    bag_code: int | None = None
+    runtimes_s: dict[str, int] = field(default_factory=dict)
+    attachments_s: dict[str, int] = field(default_factory=dict)
+    attachment_types: list[int] = field(default_factory=list)
+    event_log_size: int | None = None
+    event_index: int | None = None
+    event_counter: int | None = None
+    last_event: Vk7Event | None = None
+
+    @property
+    def total_minutes(self) -> float | None:
+        total = self.runtimes_s.get("total")
+        return round(total / 60, 1) if total is not None else None
+
+
+def apply_vk7_value(live: Vk7Live, index: int, sub: int, data: bytes) -> None:
+    """Store one decoded response."""
+    if index == VK7_IDX_BATTERY and data:
+        if sub == 1:
+            live.battery = data[0]
+        elif sub == 2:
+            live.battery_absolute = data[0]
+    elif index == VK7_IDX_BATTERY_EXTRA and sub == 3 and len(data) >= 2:
+        live.battery_extra = int.from_bytes(data[:2], "little", signed=True)
+    elif index == VK7_IDX_FILTER_BAG and sub == 1 and data:
+        live.bag_code = data[0]
+        live.bag = _VK7_BAG_CODES.get(data[0])
+    elif index == VK7_IDX_RUNTIME and sub in VK7_RUNTIME_SUBS:
+        if (value := _u32(data)) is not None:
+            live.runtimes_s[VK7_RUNTIME_SUBS[sub]] = value
+    elif index == VK7_IDX_ATTACHMENTS and sub == 1:
+        live.attachment_types = [
+            int.from_bytes(data[i : i + 2], "little") for i in range(0, len(data) - 1, 2)
+        ]
+    elif index == VK7_IDX_ATTACHMENTS and sub == 2:
+        live.attachments_s = {}
+        for slot, kind in enumerate(live.attachment_types):
+            if kind == 0xFFFF:
+                continue
+            if (seconds := _u32(data, slot * 4)) is not None:
+                live.attachments_s[VK7_ATTACHMENT_TYPES.get(kind, f"type_{kind}")] = seconds
+    elif index == VK7_IDX_EVENT_INFO and data:
+        if sub == 1:
+            live.event_log_size = data[0]
+        elif sub == 2:
+            live.event_index = data[0]
+        elif sub == 3:
+            live.event_counter = _u32(data)
+    elif index == VK7_IDX_EVENT_LOG and len(data) >= 9:
+        live.last_event = Vk7Event(
+            index=data[0],
+            runtime_s=_u32(data, 1) or 0,
+            event_type=data[5],
+            source=data[6],
+            warning=data[7],
+            number=data[8],
+        )
+
+
+def vk7_live_is_newer(device: Vk7Data) -> bool:
+    """True when the Bluetooth reading is more recent than the app's last sync."""
+    from datetime import datetime  # noqa: PLC0415
+
+    live = device.live
+    if live is None or live.read_at is None:
+        return False
+    if not device.last_sync:
+        return True
+    try:
+        synced = datetime.fromisoformat(str(device.last_sync).replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    return live.read_at >= synced
+
+
+def vk7_minutes_by_mode(live: Vk7Live) -> dict[str, int]:
+    """Runtime per attachment in the same keys as the app statistics."""
+    minutes: dict[str, int] = {}
+    if "passive" in live.runtimes_s:
+        minutes["passive"] = round(live.runtimes_s["passive"] / 60)
+    if "electric" in live.runtimes_s:
+        minutes["pb7"] = round(live.runtimes_s["electric"] / 60)
+    for kind, seconds in live.attachments_s.items():
+        minutes[kind] = round(seconds / 60)
+    return minutes

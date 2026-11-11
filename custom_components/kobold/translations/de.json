@@ -134,6 +134,9 @@
       },
       "vk7_last_sync": {
         "name": "Letzte App-Synchronisierung"
+      },
+      "vk7_bluetooth_read": {
+        "name": "Letzte Bluetooth-Abfrage"
       }
     },
     "binary_sensor": {
@@ -231,6 +234,10 @@
         "listen_seconds": {
           "name": "Mithören",
           "description": "Alle meldenden Werte abonnieren und so viele Sekunden Meldungen sammeln."
+        },
+        "read": {
+          "name": "Daten lesen",
+          "description": "Akkustand, Filtertüte, Laufzeiten und letztes Ereignis wie die App auslesen (statt die Dienste aufzulisten)."
         }
       }
     }

@@ -124,6 +124,7 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
         self.robots: dict[str, RobotData] = {}
         self.fan_speed: dict[str, str] = {}
         self.vk7: dict[str, Vk7Data] = {}
+        self.vk7_readers: dict[str, Any] = {}
         self._cycle = 0
         self._reauth_started = False
 
@@ -263,6 +264,13 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
                 _LOGGER.debug("Could not load VK7 data of %s: %s", device.name, err)
             found[device.product_id] = device
         self.vk7 = found
+
+    @callback
+    def async_set_vk7_live(self, product_id: str, live: Any) -> None:
+        """Store values read from a VK7 over Bluetooth."""
+        if (device := self.vk7.get(product_id)) is not None:
+            device.live = live
+            self.async_update_listeners()
 
     async def _reload_maps_later(self) -> None:
         await asyncio.sleep(60)  # the cloud needs a moment to render the map

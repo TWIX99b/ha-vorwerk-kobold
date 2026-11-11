@@ -34,10 +34,10 @@ syncs from a **VK7** stick vacuum.
 - **VK7 stick vacuum**: the data the app syncs from the VK7 (battery health,
   filter bag, maintenance trackers such as *clean brush* in %, total time and
   area). It only changes after the app has synced with the VK7 via Bluetooth.
-  With Home Assistant Bluetooth (local adapter or a proxy near the VK7) there
-  is also an *In Bluetooth range* sensor and a developer action
-  `kobold.vk7_ble_probe` that lists the VK7's Bluetooth services (read-only),
-  the first step towards reading the VK7 directly.
+  With Home Assistant Bluetooth (local adapter or an active proxy near the
+  VK7) the integration also reads the VK7 directly whenever it is awake (in
+  use or charging): **battery level**, filter bag and runtimes, plus an *In
+  Bluetooth range* sensor. It only sends the same read requests as the app.
 - **Proper login**: e-mail one-time code, token refresh, and a re-authentication
   flow instead of silently dying when the login expires.
 - English and German translations, diagnostics download.
@@ -74,10 +74,11 @@ Rooms of one call must be on the same Kobold map.
   Bluetooth to the app; Home Assistant sees what the app last uploaded.
 - This uses the unofficial API of the MyKobold app and may break when Vorwerk
   changes it.
-- The Bluetooth part for the VK7 (*In Bluetooth range* sensor and the
-  `kobold.vk7_ble_probe` developer action) is experimental. The VK7 only
-  accepts Bluetooth connections for a while after it has been woken up, so it
-  cannot be read in the background.
+- The Bluetooth part for the VK7 is experimental. The VK7 only accepts
+  connections while it is awake (in use, and for a while afterwards while it
+  charges), so values update after use, not continuously. Close the MyKobold
+  app on your phone when you want Home Assistant to read it – the VK7 talks to
+  one device at a time.
 
 ---
 
@@ -91,6 +92,10 @@ Dazu die **Zeitpläne** der App als Schalter, die **Einstellungen** (Lautstärke
 Audiosignale, Sprachassistent, Sprache, Objekte umfahren, niedrige Durchfahrten)
 und die Daten des **VK7** (Akkuzustand, Filtertüte, Wartungszähler, Saugzeit),
 soweit die App sie zuletzt synchronisiert hat.
+
+Mit Home Assistant Bluetooth (z. B. ein aktiver Proxy in der Nähe) liest die
+Integration den VK7 nach dem Saugen auch direkt aus: **Akkustand**,
+Filtertüte und Laufzeiten.
 
 Inoffizielles Community-Projekt, nicht von Vorwerk. Die Bluetooth-Funktionen
 für den VK7 sind experimentell.

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.components.sensor import (
+    RestoreSensor,
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
@@ -29,6 +30,8 @@ from .protocol import (
     Vk7Data,
     Vk7Tracker,
     next_schedule_run,
+    vk7_live_is_newer,
+    vk7_minutes_by_mode,
 )
 
 PARALLEL_UPDATES = 0
@@ -174,6 +177,55 @@ def _parse_time(value: str | None) -> Any:
 class KoboldVk7SensorDescription(SensorEntityDescription):
     value: Callable[[Vk7Data], Any]
     attrs: Callable[[Vk7Data], dict[str, Any]] = lambda _device: {}
+    needs_bluetooth: bool = False  # only with a Bluetooth reader for this VK7
+    restore: bool = False  # keep the last value until the next reading
+
+
+def _vk7_bag(device: Vk7Data) -> str | None:
+    if vk7_live_is_newer(device) and device.live and device.live.bag:
+        return device.live.bag
+    return device.bag
+
+
+def _vk7_total_minutes(device: Vk7Data) -> float | None:
+    cloud = device.total_minutes
+    live = device.live.total_minutes if device.live else None
+    if live is None:
+        return cloud
+    # the app rounds differently; never go backwards (total_increasing)
+    return max(live, cloud or 0)
+
+
+def _vk7_mode_attrs(device: Vk7Data) -> dict[str, Any]:
+    if vk7_live_is_newer(device) and device.live and device.live.runtimes_s:
+        minutes = vk7_minutes_by_mode(device.live)
+    else:
+        minutes = device.minutes_by_mode
+    return {f"minutes_{mode}": value for mode, value in minutes.items()}
+
+
+def _vk7_ble_attrs(device: Vk7Data) -> dict[str, Any]:
+    live = device.live
+    if live is None:
+        return {}
+    attrs: dict[str, Any] = {
+        "battery_absolute": live.battery_absolute,
+        "battery_extra_raw": live.battery_extra,
+        "motor_minutes": round(live.runtimes_s["motor"] / 60)
+        if "motor" in live.runtimes_s
+        else None,
+        "event_counter": live.event_counter,
+    }
+    if live.last_event is not None:
+        event = live.last_event
+        attrs["last_event"] = {
+            "runtime_h": round(event.runtime_s / 3600, 2),
+            "type": event.event_type,
+            "source": event.source,
+            "warning": event.warning,
+            "number": event.number,
+        }
+    return attrs
 
 
 VK7_SENSORS: tuple[KoboldVk7SensorDescription, ...] = (
@@ -189,7 +241,7 @@ VK7_SENSORS: tuple[KoboldVk7SensorDescription, ...] = (
         translation_key="vk7_bag",
         device_class=SensorDeviceClass.ENUM,
         options=list(VK7_BAG_STATES),
-        value=lambda d: d.bag,
+        value=_vk7_bag,
     ),
     KoboldVk7SensorDescription(
         key="total_time",
@@ -199,8 +251,8 @@ VK7_SENSORS: tuple[KoboldVk7SensorDescription, ...] = (
         native_unit_of_measurement=UnitOfTime.MINUTES,
         suggested_unit_of_measurement=UnitOfTime.HOURS,
         suggested_display_precision=1,
-        value=lambda d: d.total_minutes,
-        attrs=lambda d: {f"minutes_{mode}": v for mode, v in d.minutes_by_mode.items()},
+        value=_vk7_total_minutes,
+        attrs=_vk7_mode_attrs,
     ),
     KoboldVk7SensorDescription(
         key="total_area",
@@ -216,6 +268,25 @@ VK7_SENSORS: tuple[KoboldVk7SensorDescription, ...] = (
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_category=EntityCategory.DIAGNOSTIC,
         value=lambda d: _parse_time(d.last_sync),
+    ),
+    KoboldVk7SensorDescription(
+        key="battery_level",
+        device_class=SensorDeviceClass.BATTERY,
+        state_class=SensorStateClass.MEASUREMENT,
+        native_unit_of_measurement=PERCENTAGE,
+        value=lambda d: d.live.battery if d.live else None,
+        needs_bluetooth=True,
+        restore=True,
+    ),
+    KoboldVk7SensorDescription(
+        key="bluetooth_read",
+        translation_key="vk7_bluetooth_read",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value=lambda d: d.live.read_at if d.live else None,
+        attrs=_vk7_ble_attrs,
+        needs_bluetooth=True,
+        restore=True,
     ),
 )
 
@@ -245,6 +316,8 @@ async def async_setup_entry(
                 new.append(KoboldSensor(coordinator, rid, description))
         for pid, device in coordinator.vk7.items():
             for vk7_description in VK7_SENSORS:
+                if vk7_description.needs_bluetooth and pid not in coordinator.vk7_readers:
+                    continue
                 if (f"vk7_{pid}", vk7_description.key) not in added:
                     added.add((f"vk7_{pid}", vk7_description.key))
                     new.append(KoboldVk7Sensor(coordinator, pid, vk7_description))
@@ -275,16 +348,25 @@ class KoboldSensor(KoboldEntity, SensorEntity):
         return self.entity_description.attrs(self.robot) or None
 
 
-class KoboldVk7Sensor(KoboldVk7Entity, SensorEntity):
+class KoboldVk7Sensor(KoboldVk7Entity, RestoreSensor):
     entity_description: KoboldVk7SensorDescription
 
     def __init__(self, coordinator, product_id: str, description: KoboldVk7SensorDescription) -> None:
         super().__init__(coordinator, product_id, description.key)
         self.entity_description = description
+        self._restored: Any = None
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        if self.entity_description.restore and (last := await self.async_get_last_sensor_data()):
+            self._restored = last.native_value
 
     @property
     def native_value(self) -> Any:
-        return self.entity_description.value(self.device)
+        value = self.entity_description.value(self.device)
+        if value is None and self.entity_description.restore:
+            return self._restored
+        return value
 
     @property
     def extra_state_attributes(self) -> dict[str, Any] | None:

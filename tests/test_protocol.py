@@ -334,3 +334,44 @@ def test_mac_and_bytes():
     assert protocol.describe_bytes(b"VK7\x00") == {"hex": "564b3700", "length": 4, "text": "VK7", "uint_le": 0x00374B56}
     assert protocol.describe_bytes(b"\x10\x27") == {"hex": "1027", "length": 2, "uint_le": 10000}
     assert "text" not in protocol.describe_bytes(b"\xff\xfe\x00\x01")
+
+
+def test_vk7_ble_protocol():
+    # request/response pairs captured from the MyKobold app talking to a VK7
+    assert protocol.vk7_read_request(0x0D53, 1, 1).hex() == "01000d53010001"
+    assert protocol.vk7_read_request(0x1777, 0, 0x0C).hex() == "0100177700000c"
+    live = protocol.Vk7Live()
+    responses = [
+        "00000cc901001343f4bcea",
+        "00000d53015a",
+        "00000d53025f",
+        "00000d5503c6ff",
+        "00000e8c0100",
+        "000017f70120f60100",
+        "000017f7023df90100",
+        "000017f703fcef0000",
+        "000017f704a2070000",
+        "000017f70500000000",
+        "000017f80103000500ffffffffffffffffffff",
+        "000017f802f9a50000c04a0000" + "00" * 16,
+        "0000177601" + "14",
+        "0000177602" + "0c",
+        "000017760339010000",
+        "0000177700" + "0c3cf30100" + "01020002",
+    ]
+    for hexdata in responses:
+        parsed = protocol.parse_vk7_response(bytes.fromhex(hexdata))
+        assert parsed is not None
+        protocol.apply_vk7_value(live, *parsed)
+    assert live.battery == 90 and live.battery_absolute == 95
+    assert live.battery_extra == -58
+    assert live.bag == "empty"
+    # matches the app's statistics: 2143 min total, 1024 passive, 33 PB, 708 EB7, 319 SP7
+    assert round(live.runtimes_s["total"] / 60) == 2142
+    assert round(live.runtimes_s["passive"] / 60) == 1024
+    assert round(live.runtimes_s["electric"] / 60) == 33
+    assert {k: round(v / 60) for k, v in live.attachments_s.items()} == {"eb7": 708, "sp7": 319}
+    assert live.event_counter == 313 and live.event_index == 12 and live.event_log_size == 20
+    assert live.last_event.runtime_s == 127804 and live.last_event.number == 2
+    assert live.total_minutes == 2142.4
+    assert protocol.parse_vk7_response(b"\x01\x00") is None
