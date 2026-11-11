@@ -106,6 +106,34 @@
       },
       "base_state": {
         "name": "Basisstation"
+      },
+      "next_cleaning": {
+        "name": "Nächste geplante Reinigung"
+      },
+      "vk7_battery": {
+        "name": "Akkuzustand",
+        "state": {
+          "good": "Gut",
+          "medium": "Mittel",
+          "reduced": "Reduziert"
+        }
+      },
+      "vk7_bag": {
+        "name": "Filtertüte",
+        "state": {
+          "empty": "Leer",
+          "half_full": "Halb voll",
+          "full": "Voll"
+        }
+      },
+      "vk7_total_time": {
+        "name": "Saugzeit gesamt"
+      },
+      "vk7_total_area": {
+        "name": "Gesaugte Fläche gesamt"
+      },
+      "vk7_last_sync": {
+        "name": "Letzte App-Synchronisierung"
       }
     },
     "binary_sensor": {
@@ -124,6 +152,45 @@
       },
       "last_cleaning": {
         "name": "Letzte Reinigung"
+      }
+    },
+    "number": {
+      "volume": {
+        "name": "Lautstärke"
+      }
+    },
+    "select": {
+      "language": {
+        "name": "Sprache",
+        "state": {
+          "de": "Deutsch",
+          "en_gb": "Englisch (UK)",
+          "it": "Italienisch",
+          "fr_fr": "Französisch",
+          "es": "Spanisch",
+          "cs": "Tschechisch",
+          "pl": "Polnisch",
+          "pt_pt": "Portugiesisch",
+          "zh_hans": "Chinesisch (vereinfacht)",
+          "tr": "Türkisch"
+        }
+      }
+    },
+    "switch": {
+      "sounds": {
+        "name": "Audiosignale"
+      },
+      "voice": {
+        "name": "Sprachassistent"
+      },
+      "object_avoidance": {
+        "name": "Objekte umfahren"
+      },
+      "overhang_detection": {
+        "name": "Niedrige Durchfahrten erkennen"
+      },
+      "schedule": {
+        "name": "Zeitplan {time} {days}"
       }
     }
   },

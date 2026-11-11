@@ -106,6 +106,34 @@
       },
       "base_state": {
         "name": "Base station"
+      },
+      "next_cleaning": {
+        "name": "Next scheduled cleaning"
+      },
+      "vk7_battery": {
+        "name": "Battery health",
+        "state": {
+          "good": "Good",
+          "medium": "Medium",
+          "reduced": "Reduced"
+        }
+      },
+      "vk7_bag": {
+        "name": "Filter bag",
+        "state": {
+          "empty": "Empty",
+          "half_full": "Half full",
+          "full": "Full"
+        }
+      },
+      "vk7_total_time": {
+        "name": "Total vacuuming time"
+      },
+      "vk7_total_area": {
+        "name": "Total area vacuumed"
+      },
+      "vk7_last_sync": {
+        "name": "Last app sync"
       }
     },
     "binary_sensor": {
@@ -124,6 +152,45 @@
       },
       "last_cleaning": {
         "name": "Last cleaning"
+      }
+    },
+    "number": {
+      "volume": {
+        "name": "Volume"
+      }
+    },
+    "select": {
+      "language": {
+        "name": "Language",
+        "state": {
+          "de": "German",
+          "en_gb": "English (UK)",
+          "it": "Italian",
+          "fr_fr": "French",
+          "es": "Spanish",
+          "cs": "Czech",
+          "pl": "Polish",
+          "pt_pt": "Portuguese",
+          "zh_hans": "Chinese (simplified)",
+          "tr": "Turkish"
+        }
+      }
+    },
+    "switch": {
+      "sounds": {
+        "name": "Sounds"
+      },
+      "voice": {
+        "name": "Voice assistant"
+      },
+      "object_avoidance": {
+        "name": "Object avoidance"
+      },
+      "overhang_detection": {
+        "name": "Detect low passages"
+      },
+      "schedule": {
+        "name": "Schedule {time} {days}"
       }
     }
   },

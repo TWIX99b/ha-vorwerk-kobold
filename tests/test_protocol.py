@@ -222,3 +222,102 @@ def test_map_images():
     )
     assert last.start == "2026-11-11T09:00:00Z" and last.started_by == "schedule"
     assert protocol.parse_cleaning_maps([]) is None
+
+
+SCHEDULING = {
+    "enabled": True,
+    "events": [
+        {
+            "command": {"ability": "cleaning.start", "runs": [{"map": {"floorplan_uuid": "fp", "zone_uuid": None}, "settings": {"mode": "eco"}}]},
+            "days": ["sat", "mon", "thu", "wed", "tue", "sun", "fri"],
+            "enabled": True,
+            "schedule_uuid": "a",
+            "time": "17:00",
+        },
+        {
+            "command": {"ability": "cleaning.start", "runs": []},
+            "days": ["mon", "tue", "wed", "thu", "fri"],
+            "enabled": False,
+            "schedule_uuid": "b",
+            "time": "10:00",
+        },
+    ],
+}
+
+
+def test_scheduling():
+    enabled, events = protocol.parse_scheduling(SCHEDULING)
+    assert enabled
+    assert [e.uuid for e in events] == ["b", "a"]  # sorted by time
+    daily = events[1]
+    assert daily.days == protocol.DAY_ORDER and daily.mode == "eco" and daily.floorplan_uuid == "fp"
+    assert protocol.days_label(daily.days) == "täglich"
+    assert protocol.days_label(events[0].days, "en") == "Mon–Fri"
+    assert protocol.days_label(("mon", "wed")) == "Mo, Mi"
+    body = protocol.schedule_update_body(events[0], True)
+    assert body["enabled"] is True and body["days"] == list(protocol.DAY_ORDER[:5])
+    assert body["command"]["ability"] == "cleaning.start"
+
+
+def test_next_schedule_run():
+    from datetime import datetime, timezone
+
+    _, events = protocol.parse_scheduling(SCHEDULING)
+    # Wednesday 2026-11-11 18:00 -> daily 17:00 already passed -> Thursday 17:00
+    now = datetime(2026, 11, 11, 18, 0, tzinfo=timezone.utc)
+    assert protocol.next_schedule_run(events, now) == datetime(2026, 11, 12, 17, 0, tzinfo=timezone.utc)
+    early = datetime(2026, 11, 11, 9, 0, tzinfo=timezone.utc)
+    assert protocol.next_schedule_run(events, early).hour == 17  # 10:00 one is disabled
+    assert protocol.next_schedule_run((), now) is None
+
+
+def test_language_codes():
+    assert protocol.language_option("EN-GB") == "en_gb"
+    assert protocol.language_code("zh_hans", ["DE", "ZH-HANS"]) == "ZH-HANS"
+
+
+def test_setting_payload():
+    current = {"available_languages": ["DE", "EN-GB"], "gender": "M", "language": "EN-GB"}
+    assert protocol.setting_payload("robot_language", current, {"language": "DE"}) == {
+        "language": "DE",
+        "available_languages": ["DE", "EN-GB"],
+    }
+    assert protocol.setting_payload(
+        "sounds", {"enabled": True, "voice": "on", "volume": 27}, {"volume": 40}
+    ) == {"enabled": True, "volume": 40, "voice": "on"}
+
+
+PRODUCTS = [
+    {"id": 896293, "productId": "VK7", "name": "Kobold VK7 Akku-Staubsauger", "serialNo": "224"},
+    {"id": 1038334, "robotId": "7f23", "productId": "VR7", "name": "Robot"},
+    {"id": 897815, "productId": "SP7", "name": "Kobold SP7 Saugwischer\n"},
+]
+
+
+def test_vk7():
+    (vk7,) = protocol.find_vk7_products(PRODUCTS)
+    assert vk7.product_id == "896293" and vk7.serial == "224"
+    protocol.apply_vk7_health(
+        vk7,
+        {
+            "batteryStatus": "GOOD",
+            "filterBagStatus": "HALF_FULL",
+            "productTrackers": [
+                {"id": 1, "name": "Bürste reinigen", "type": "CLEANING", "usageProgress": 30,
+                 "countedHours": 6, "productLifeHours": 20, "maintenanceWindowHours": [15, 20, 30],
+                 "activated": True},
+                {"id": 2, "name": "off", "activated": False},
+            ],
+            "lastSynchronizationDate": "2026-04-09T08:14:03Z",
+        },
+    )
+    assert vk7.battery == "good" and vk7.bag == "half_full"
+    assert [t.name for t in vk7.trackers] == ["Bürste reinigen"]
+    assert vk7.trackers[0].progress == 30 and vk7.trackers[0].kind == "cleaning"
+    protocol.apply_vk7_log(
+        vk7, {"totalVacuumedMinutes": 1768, "totalVacuumedEbMinutes": 567, "totalAreaVacuumed": 3536}
+    )
+    assert vk7.total_minutes == 1768 and vk7.minutes_by_mode == {"eb7": 567}
+    assert vk7.total_area == 3536
+    protocol.apply_vk7_health(vk7, {"batteryStatus": "SOMETHING_NEW"})
+    assert vk7.battery is None

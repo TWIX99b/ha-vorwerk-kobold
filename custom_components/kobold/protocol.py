@@ -485,3 +485,249 @@ def build_cleaning_request(
             }
         ]
     return {"runs": runs, "ability": "cleaning.start"}
+
+
+# --- Schedules ------------------------------------------------------------------
+
+DAY_ORDER = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")
+_DAY_LABELS = {
+    "de": ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"),
+    "en": ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"),
+}
+_DAY_GROUPS = {
+    "de": {"all": "täglich", "workdays": "Mo–Fr", "weekend": "Wochenende"},
+    "en": {"all": "daily", "workdays": "Mon–Fri", "weekend": "weekend"},
+}
+
+
+@dataclass(frozen=True)
+class ScheduleEvent:
+    uuid: str
+    enabled: bool
+    days: tuple[str, ...]
+    time: str
+    mode: str | None = None
+    floorplan_uuid: str | None = None
+    zone_uuids: tuple[str, ...] = ()
+    command: dict[str, Any] = field(default_factory=dict, compare=False, repr=False)
+
+
+def _norm_day(value: Any) -> str | None:
+    text = str(value or "").strip().lower()[:3]
+    return text if text in DAY_ORDER else None
+
+
+def parse_scheduling(data: Any) -> tuple[bool, tuple[ScheduleEvent, ...]]:
+    data = _as_dict(data)
+    events = []
+    for item in data.get("events") or []:
+        item = _as_dict(item)
+        uuid = item.get("schedule_uuid") or item.get("scheduleUuid")
+        time_ = str(item.get("time") or "")
+        if not uuid or len(time_) < 4:
+            continue
+        days = tuple(
+            day for day in DAY_ORDER if day in {_norm_day(d) for d in item.get("days") or []}
+        )
+        command = _as_dict(item.get("command"))
+        runs = [_as_dict(r) for r in command.get("runs") or []]
+        first = runs[0] if runs else {}
+        events.append(
+            ScheduleEvent(
+                uuid=str(uuid),
+                enabled=_as_bool(item.get("enabled")),
+                days=days,
+                time=time_[:5],
+                mode=_as_dict(first.get("settings")).get("mode"),
+                floorplan_uuid=_as_dict(first.get("map")).get("floorplan_uuid"),
+                zone_uuids=tuple(
+                    z for z in (_as_dict(r.get("map")).get("zone_uuid") for r in runs) if z
+                ),
+                command=command,
+            )
+        )
+    events.sort(key=lambda e: (e.time, e.uuid))
+    return _as_bool(data.get("enabled", True)), tuple(events)
+
+
+def days_label(days: tuple[str, ...], language: str = "de") -> str:
+    lang = "de" if language.startswith("de") else "en"
+    group = _DAY_GROUPS[lang]
+    if set(days) == set(DAY_ORDER):
+        return group["all"]
+    if set(days) == set(DAY_ORDER[:5]):
+        return group["workdays"]
+    if set(days) == set(DAY_ORDER[5:]):
+        return group["weekend"]
+    labels = _DAY_LABELS[lang]
+    return ", ".join(labels[DAY_ORDER.index(d)] for d in days)
+
+
+def schedule_update_body(event: ScheduleEvent, enabled: bool) -> dict[str, Any]:
+    """Body for ``PUT /robots/{id}/scheduling/{uuid}`` that only flips ``enabled``."""
+    return {
+        "enabled": enabled,
+        "days": list(event.days),
+        "time": event.time,
+        "command": event.command,
+    }
+
+
+def next_schedule_run(events: tuple[ScheduleEvent, ...], now: Any) -> Any:
+    """Next start (aware datetime in ``now``'s timezone) of any enabled event."""
+    from datetime import timedelta  # local import keeps module import cheap
+
+    best = None
+    for event in events:
+        if not event.enabled or not event.days:
+            continue
+        try:
+            hour, minute = (int(part) for part in event.time.split(":")[:2])
+        except ValueError:
+            continue
+        for offset in range(8):
+            day = now + timedelta(days=offset)
+            if DAY_ORDER[day.weekday()] not in event.days:
+                continue
+            start = day.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if start <= now:
+                continue
+            if best is None or start < best:
+                best = start
+            break
+    return best
+
+
+# --- Robot language -------------------------------------------------------------
+
+
+def language_option(code: str) -> str:
+    """Cloud language code ("EN-GB") to a Home Assistant option key ("en_gb")."""
+    return code.strip().lower().replace("-", "_")
+
+
+def language_code(option: str, available: list[str]) -> str:
+    for code in available:
+        if language_option(code) == option:
+            return code
+    return option.upper().replace("_", "-")
+
+
+# --- Robot settings -------------------------------------------------------------
+
+# Fields the app sends back in ``PUT /robots/{id}/settings/{name}`` ({"payload": ...}).
+SETTING_FIELDS: dict[str, tuple[str, ...]] = {
+    "sounds": ("enabled", "volume", "voice"),
+    "robot_language": ("language", "available_languages"),
+    "object_avoidance": ("enabled", "streaming_level"),
+    "overhang_detection": ("enabled",),
+}
+
+
+def setting_payload(name: str, current: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any]:
+    merged = {**(current or {}), **changes}
+    fields = SETTING_FIELDS.get(name)
+    if fields is None:
+        return merged
+    return {key: merged[key] for key in fields if key in merged}
+
+
+# --- VK7 stick vacuum (data synced by the MyKobold app) ---------------------------
+
+VK7_BATTERY_STATES = ("good", "medium", "reduced")
+VK7_BAG_STATES = ("empty", "half_full", "full")
+
+
+@dataclass(frozen=True)
+class Vk7Tracker:
+    tracker_id: str
+    name: str
+    kind: str | None
+    progress: int | None
+    counted_hours: float | None
+    life_hours: float | None
+    maintenance_hours: tuple[float, ...] = ()
+
+
+@dataclass
+class Vk7Data:
+    product_id: str
+    serial: str
+    name: str
+    model: str = "VK7"
+    battery: str | None = None
+    bag: str | None = None
+    trackers: tuple[Vk7Tracker, ...] = ()
+    total_minutes: int | None = None
+    minutes_by_mode: dict[str, int] = field(default_factory=dict)
+    total_area: float | None = None
+    last_sync: str | None = None
+
+
+def find_vk7_products(products: Any) -> list[Vk7Data]:
+    found = []
+    for item in products or []:
+        item = _as_dict(item)
+        if str(item.get("productId") or "").upper() != "VK7" or item.get("id") is None:
+            continue
+        name = " ".join(str(item.get("name") or "").split()) or "Kobold VK7"
+        found.append(
+            Vk7Data(
+                product_id=str(item["id"]),
+                serial=str(item.get("serialNo") or item["id"]),
+                name=name,
+            )
+        )
+    return found
+
+
+def _lower_option(value: Any, options: tuple[str, ...]) -> str | None:
+    text = str(value or "").strip().lower()
+    return text if text in options else None
+
+
+def apply_vk7_health(device: Vk7Data, data: Any) -> None:
+    data = _as_dict(data)
+    device.battery = _lower_option(data.get("batteryStatus"), VK7_BATTERY_STATES)
+    device.bag = _lower_option(data.get("filterBagStatus"), VK7_BAG_STATES)
+    trackers = []
+    for item in data.get("productTrackers") or []:
+        item = _as_dict(item)
+        if item.get("id") is None or item.get("activated") is False:
+            continue
+        trackers.append(
+            Vk7Tracker(
+                tracker_id=str(item["id"]),
+                name=" ".join(str(item.get("name") or item["id"]).split()),
+                kind=(str(item["type"]).lower() if item.get("type") else None),
+                progress=_as_int(item.get("usageProgress")),
+                counted_hours=_as_float(item.get("countedHours")),
+                life_hours=_as_float(item.get("productLifeHours")),
+                maintenance_hours=tuple(
+                    v for v in (_as_float(h) for h in item.get("maintenanceWindowHours") or [])
+                    if v is not None
+                ),
+            )
+        )
+    device.trackers = tuple(trackers)
+    device.last_sync = data.get("lastSynchronizationDate") or device.last_sync
+
+
+_VK7_MODE_KEYS = {
+    "totalVacuumedPassiveMinutes": "passive",
+    "totalVacuumedEbMinutes": "eb7",
+    "totalVacuumedSpMinutes": "sp7",
+    "totalVacuumedPbMinutes": "pb7",
+}
+
+
+def apply_vk7_log(device: Vk7Data, data: Any) -> None:
+    data = _as_dict(data)
+    device.total_minutes = _as_int(data.get("totalVacuumedMinutes"))
+    device.minutes_by_mode = {
+        mode: value
+        for key, mode in _VK7_MODE_KEYS.items()
+        if (value := _as_int(data.get(key))) is not None
+    }
+    device.total_area = _as_float(data.get("totalAreaVacuumed"))
+    device.last_sync = data.get("lastSynchronizationDate") or device.last_sync

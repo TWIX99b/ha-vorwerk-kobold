@@ -44,9 +44,32 @@ async def async_get_config_entry_diagnostics(
                 {"name": plan.name, "zones": [zone.name for zone in plan.zones]}
                 for plan in robot.floorplans
             ],
+            "settings": robot.settings,
+            "schedules": [
+                {
+                    "enabled": e.enabled,
+                    "days": list(e.days),
+                    "time": e.time,
+                    "mode": e.mode,
+                    "rooms": len(e.zone_uuids),
+                }
+                for e in robot.schedules
+            ],
         }
+    vk7 = {
+        f"vk7_{index}": {
+            "battery": device.battery,
+            "bag": device.bag,
+            "trackers": [(t.name, t.progress) for t in device.trackers],
+            "total_minutes": device.total_minutes,
+            "total_area": device.total_area,
+            "last_sync": device.last_sync,
+        }
+        for index, device in enumerate(coordinator.vk7.values())
+    }
     return {
         "entry": async_redact_data(dict(entry.data), TO_REDACT),
         "socket_connected": bool(coordinator.socket and coordinator.socket.connected),
         "robots": async_redact_data(robots, TO_REDACT),
+        "vk7": vk7,
     }

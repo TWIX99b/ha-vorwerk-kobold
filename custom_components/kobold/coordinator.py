@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 import logging
 from typing import Any
@@ -34,17 +34,26 @@ from .const import (
 )
 from .protocol import (
     MODEL_NAMES,
+    SETTING_FIELDS,
     CleaningMap,
     CleaningProgress,
     FloorPlan,
     RobotState,
+    ScheduleEvent,
     SocketEvent,
+    Vk7Data,
+    apply_vk7_health,
+    apply_vk7_log,
     build_cleaning_request,
+    find_vk7_products,
     parse_cleaning_maps,
     parse_cleaning_state,
     parse_floorplan,
     parse_robot_state,
+    parse_scheduling,
     parse_zones,
+    schedule_update_body,
+    setting_payload,
     token_valid,
 )
 from .websocket import KoboldSocket
@@ -52,6 +61,7 @@ from .websocket import KoboldSocket
 _LOGGER = logging.getLogger(__name__)
 
 MAP_REFRESH_EVERY = 6  # refresh cycles (6 x 10 min = 1 h)
+VERIFY_DELAY = 5  # seconds before a written setting is read back
 
 type KoboldConfigEntry = ConfigEntry[KoboldCoordinator]
 
@@ -70,6 +80,9 @@ class RobotData:
     last_seen: datetime | None = None
     floorplans: list[FloorPlan] = field(default_factory=list)
     last_cleaning_map: CleaningMap | None = None
+    settings: dict[str, dict[str, Any]] = field(default_factory=dict)
+    schedules: tuple[ScheduleEvent, ...] = ()
+    schedules_loaded: bool = False
 
     @classmethod
     def from_api(cls, data: dict[str, Any]) -> RobotData:
@@ -110,6 +123,7 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
         self.socket: KoboldSocket | None = None
         self.robots: dict[str, RobotData] = {}
         self.fan_speed: dict[str, str] = {}
+        self.vk7: dict[str, Vk7Data] = {}
         self._cycle = 0
         self._reauth_started = False
 
@@ -146,6 +160,8 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
             if not self.robots or self._cycle % MAP_REFRESH_EVERY == 0:
                 await self._load_robots()
                 await self._load_maps()
+                await self._load_vk7()
+            await self._load_settings()
             self._cycle += 1
         except KoboldAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
@@ -199,6 +215,54 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
                     _LOGGER.debug("Could not load cleaning maps of %s: %s", robot.name, err)
             except KoboldApiError as err:
                 _LOGGER.debug("Could not load maps of %s: %s", robot.name, err)
+
+    async def _load_settings(self, robot_ids: list[str] | None = None) -> None:
+        for robot_id in robot_ids or list(self.robots):
+            robot = self.robots.get(robot_id)
+            if robot is None:
+                continue
+            for name in SETTING_FIELDS:
+                try:
+                    value = await self.api.get_setting(robot.robot_id, name)
+                except KoboldError as err:
+                    _LOGGER.debug("Setting %s of %s not available: %s", name, robot.name, err)
+                    continue
+                if value:
+                    robot.settings[name] = value
+            await self._load_schedules(robot)
+
+    async def _load_schedules(self, robot: RobotData) -> None:
+        try:
+            raw = await self.api.get_scheduling(robot.robot_id)
+        except KoboldError as err:
+            _LOGGER.debug("Schedules of %s not available: %s", robot.name, err)
+            return
+        _enabled, robot.schedules = parse_scheduling(raw)
+        robot.schedules_loaded = True
+
+    async def _load_vk7(self) -> None:
+        """Stick vacuums (VK7) – their data only changes when the app syncs them."""
+        try:
+            authorization = await self.api.companion_login()
+            products = find_vk7_products(await self.api.products(authorization))
+        except KoboldError as err:
+            _LOGGER.debug("Could not load MyKobold products: %s", err)
+            return
+        found: dict[str, Vk7Data] = {}
+        for item in products:
+            device = self.vk7.get(item.product_id) or item
+            device.name, device.serial = item.name, item.serial
+            try:
+                apply_vk7_health(
+                    device, await self.api.product_health(device.product_id, authorization)
+                )
+                apply_vk7_log(
+                    device, await self.api.vk7_cleaning_log(device.product_id, authorization)
+                )
+            except KoboldError as err:
+                _LOGGER.debug("Could not load VK7 data of %s: %s", device.name, err)
+            found[device.product_id] = device
+        self.vk7 = found
 
     async def _reload_maps_later(self) -> None:
         await asyncio.sleep(60)  # the cloud needs a moment to render the map
@@ -304,6 +368,57 @@ class KoboldCoordinator(DataUpdateCoordinator[dict[str, RobotData]]):
         )
         await self._call(self.api.start_cleaning(robot_id, body))
         await self._poke(robot_id)
+
+    async def async_set_setting(self, robot_id: str, name: str, **changes: Any) -> None:
+        robot = self.robots[robot_id]
+        current = robot.settings.get(name)
+        if current is None:
+            raise HomeAssistantError(f"The robot does not offer the setting {name}")
+        payload = setting_payload(name, current, changes)
+        _LOGGER.debug("Writing setting %s of %s: %s", name, robot.name, payload)
+        await self._call(self.api.put_setting(robot_id, name, payload))
+        robot.settings[name] = {**current, **changes}
+        self.async_set_updated_data(self.robots)
+        self._verify_later(robot_id, name)
+
+    def _verify_later(self, robot_id: str, name: str) -> None:
+        async def _verify() -> None:
+            await asyncio.sleep(VERIFY_DELAY)
+            robot = self.robots.get(robot_id)
+            if robot is None:
+                return
+            try:
+                if name == "scheduling":
+                    await self._load_schedules(robot)
+                else:
+                    value = await self.api.get_setting(robot_id, name)
+                    if value:
+                        robot.settings[name] = value
+            except KoboldError as err:
+                _LOGGER.debug("Could not read back %s: %s", name, err)
+                return
+            self.async_set_updated_data(self.robots)
+
+        self.config_entry.async_create_background_task(
+            self.hass, _verify(), f"{DOMAIN}_verify_{name}"
+        )
+
+    async def async_set_schedule_enabled(
+        self, robot_id: str, schedule_uuid: str, enabled: bool
+    ) -> None:
+        robot = self.robots[robot_id]
+        event = next((e for e in robot.schedules if e.uuid == schedule_uuid), None)
+        if event is None:
+            raise HomeAssistantError("This schedule no longer exists")
+        body = schedule_update_body(event, enabled)
+        _LOGGER.debug("Updating schedule %s of %s: %s", schedule_uuid, robot.name, body)
+        await self._call(self.api.put_schedule(robot_id, schedule_uuid, body))
+        robot.schedules = tuple(
+            replace(e, enabled=enabled) if e.uuid == schedule_uuid else e
+            for e in robot.schedules
+        )
+        self.async_set_updated_data(self.robots)
+        self._verify_later(robot_id, "scheduling")
 
     async def _poke(self, robot_id: str) -> None:
         if self.socket is not None:

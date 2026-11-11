@@ -1,0 +1,28 @@
+{
+  "entity": {
+    "sensor": {
+      "next_cleaning": { "default": "mdi:calendar-clock" },
+      "vk7_battery": { "default": "mdi:battery-heart-variant" },
+      "vk7_bag": {
+        "default": "mdi:delete-outline",
+        "state": { "half_full": "mdi:delete-variant", "full": "mdi:delete-alert" }
+      },
+      "vk7_total_time": { "default": "mdi:timer-outline" },
+      "vk7_total_area": { "default": "mdi:texture-box" },
+      "vk7_last_sync": { "default": "mdi:cellphone-arrow-down" }
+    },
+    "number": {
+      "volume": { "default": "mdi:volume-high" }
+    },
+    "select": {
+      "language": { "default": "mdi:translate" }
+    },
+    "switch": {
+      "sounds": { "default": "mdi:bell-ring", "state": { "off": "mdi:bell-off" } },
+      "voice": { "default": "mdi:account-voice", "state": { "off": "mdi:account-voice-off" } },
+      "object_avoidance": { "default": "mdi:cube-scan" },
+      "overhang_detection": { "default": "mdi:sofa" },
+      "schedule": { "default": "mdi:calendar-clock", "state": { "off": "mdi:calendar-remove" } }
+    }
+  }
+}

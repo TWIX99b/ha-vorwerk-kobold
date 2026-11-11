@@ -211,6 +211,60 @@ class KoboldApi:
             result = result.get("cleaning_maps") or result.get("maps") or [result]
         return [m for m in result or [] if isinstance(m, dict)]
 
+    # --- robot settings (PUT bodies are {"payload": {...}}) ------------------
+
+    async def get_setting(self, robot_id: str, name: str) -> dict[str, Any]:
+        result = await self._orbital("GET", f"/robots/{robot_id}/settings/{name}", app=True)
+        return result if isinstance(result, dict) else {}
+
+    async def put_setting(self, robot_id: str, name: str, payload: dict[str, Any]) -> Any:
+        return await self._orbital(
+            "PUT", f"/robots/{robot_id}/settings/{name}", json={"payload": payload}, app=True
+        )
+
+    async def get_scheduling(self, robot_id: str) -> dict[str, Any]:
+        result = await self._orbital("GET", f"/robots/{robot_id}/scheduling", app=True)
+        return result if isinstance(result, dict) else {}
+
+    async def put_schedule(self, robot_id: str, schedule_uuid: str, body: dict[str, Any]) -> Any:
+        return await self._orbital(
+            "PUT", f"/robots/{robot_id}/scheduling/{schedule_uuid}", json=body, app=True
+        )
+
+    # --- companion (MyKobold profile: VK7 data synced by the app) -----------
+
+    async def companion_login(self) -> str:
+        """Authorization header for Companion REST calls (same login as the socket)."""
+        return await self.socket_authorization()
+
+    async def _companion_get(self, path: str, authorization: str | None = None) -> Any:
+        if authorization is None:
+            authorization = await self.companion_login()
+        headers = {"Authorization": authorization, **_app_headers(self._market)}
+        return await _request(
+            self._session, "GET", f"{COMPANION_HOST}{path}", headers=headers
+        )
+
+    async def products(self, authorization: str | None = None) -> list[dict[str, Any]]:
+        result = await self._companion_get("/api/v1/profile/products", authorization)
+        return [p for p in result or [] if isinstance(p, dict)]
+
+    async def product_health(
+        self, product_id: int | str, authorization: str | None = None
+    ) -> dict[str, Any]:
+        result = await self._companion_get(
+            f"/api/v1/profile/products/{product_id}/health", authorization
+        )
+        return result if isinstance(result, dict) else {}
+
+    async def vk7_cleaning_log(
+        self, product_id: int | str, authorization: str | None = None
+    ) -> dict[str, Any]:
+        result = await self._companion_get(
+            f"/api/v1/profile/log/vk7/cleaning/{product_id}", authorization
+        )
+        return result if isinstance(result, dict) else {}
+
     async def start_cleaning(self, robot_id: str, body: dict[str, Any]) -> Any:
         return await self._orbital(
             "POST", f"/robots/{robot_id}/cleaning/v2", json=body, app=True

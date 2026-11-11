@@ -20,6 +20,15 @@ your own language, and with native **clean by area** support.
 - **Sensors**: battery, status, error, cleaned area of the current / last run;
   dust bag and base station only with an RB7 service station; binary sensors
   for charging, docked and problem; a *Locate* button.
+- **Schedules**: every schedule of the app as a switch (turn it on/off) with
+  days, time, mode and map as attributes, plus a *Next scheduled cleaning*
+  sensor.
+- **Robot settings**: volume, sounds, voice assistant, voice language, object
+  avoidance and low-passage detection – handy when little hands keep changing
+  the language on the robot.
+- **VK7 stick vacuum**: the data the app syncs from the VK7 (battery health,
+  filter bag, maintenance trackers such as *clean brush* in %, total time and
+  area). It only changes after the app has synced with the VK7 via Bluetooth.
 - **Proper login**: e-mail one-time code, token refresh, and a re-authentication
   flow instead of silently dying when the login expires.
 - English and German translations, diagnostics download.
@@ -53,7 +62,7 @@ Rooms of one call must be on the same Kobold map.
 
 - Only robots connected to the MyKobold cloud are supported (VR7; older
   VR200/VR300 use a different, retired cloud). The VK7 stick vacuum only talks
-  Bluetooth to the app and is not reachable through the cloud.
+  Bluetooth to the app; Home Assistant sees what the app last uploaded.
 - This uses the unofficial API of the MyKobold app and may break when Vorwerk
   changes it.
 
@@ -65,6 +74,10 @@ Steuert den **Vorwerk Kobold VR7** aus Home Assistant: Live-Status, Start,
 Pause, Stopp, zur Basis, Roboter finden, Saugstufe, **Reinigung nach Bereichen**
 (`vacuum.clean_area`), **Kartenbilder** (Grundriss und letzte Reinigung) sowie
 Sensoren für Akku, Status, Fehler, Staubbeutel und gereinigte Fläche.
+Dazu die **Zeitpläne** der App als Schalter, die **Einstellungen** (Lautstärke,
+Audiosignale, Sprachassistent, Sprache, Objekte umfahren, niedrige Durchfahrten)
+und die Daten des **VK7** (Akkuzustand, Filtertüte, Wartungszähler, Saugzeit),
+soweit die App sie zuletzt synchronisiert hat.
 
 **Einrichtung:** Über HACS als benutzerdefiniertes Repository hinzufügen,
 installieren, neu starten, dann *Einstellungen → Geräte & Dienste →
